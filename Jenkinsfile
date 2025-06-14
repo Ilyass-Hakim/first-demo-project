@@ -36,11 +36,11 @@ pipeline {
         
         stage('Deploy to Tomcat') {
             steps {
-                echo 'Deploying WAR to Tomcat server...'
+                echo 'Deploying WAR to Tomcat 11 server...'
                 script {
                     deploy adapters: [
-                        tomcat10(
-                            credentialsId: 'tomcat-credentials',
+                        tomcat9(
+                            credentialsId: 'tomcat-server',
                             path: '',
                             url: 'http://192.168.1.27:8084'
                         )
