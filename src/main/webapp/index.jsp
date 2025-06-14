@@ -76,7 +76,7 @@
             <p><strong>Visit Count:</strong> <%= visitCount %></p>
             <p><strong>Server Info:</strong> <%= application.getServerInfo() %></p>
         </div>
-        
+        <!-- blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->
         <!-- Display personalized greeting if name is provided -->
         <% if (userName != null && !userName.trim().isEmpty()) { %>
             <div class="info-box">
