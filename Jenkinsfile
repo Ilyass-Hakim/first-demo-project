@@ -5,6 +5,11 @@ pipeline {
         maven '3.9.10'
     }
     
+    triggers {
+        // Trigger build on GitHub push events
+        githubPush()
+    }
+    
     stages {
         stage('Checkout') {
             steps {
