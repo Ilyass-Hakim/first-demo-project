@@ -1,70 +1,34 @@
-pipeline {
-    agent any
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple JSP Page</title>
+</head>
+<body>
+    <h1>Hello from JSP!</h1>
     
-    tools {
-        maven '3.9.10'
-    }
+    <%
+        String message = "Welcome to my simple JSP page";
+        int number = 42;
+    %>
     
-    triggers {
-        // Trigger build on GitHub push events
-        githubPush()
-         pollSCM('H/3 * * * *')
-    }
+    <p><%= message %></p>
+    <p>Today's lucky number is: <%= number %></p>
+    <p>Current time: <%= new java.util.Date() %></p>
     
-    stages {
-        stage('Checkout') {
-            steps {
-                echo 'Checking out code from GitHub...'
-                checkout scm
-            }
-        }
-        
-        stage('Build') {
-            steps {
-                echo 'Building with Maven...'
-                sh 'mvn clean compile'
-            }
-        }
-        
-        stage('Test') {
-            steps {
-                echo 'Running tests...'
-                sh 'mvn test'
-            }
-        }
-        
-        stage('Package & Deploy to Artifactory') {
-            steps {
-                echo 'Packaging WAR and deploying to Artifactory...'
-                sh 'mvn clean deploy'
-            }
-        }
-        
-        stage('Deploy to Tomcat') {
-            steps {
-                echo 'Deploying WAR to Tomcat 11 server...'
-                script {
-                    deploy adapters: [
-                        tomcat9(
-                            credentialsId: 'tomcat-server',
-                            path: '',
-                            url: 'http://192.168.1.27:8084'
-                        )
-                    ], 
-                    contextPath: '/webapp-project',
-                    war: 'target/webapp-project-*.war'
-                }
-            }
-        }
-    }
+    <form method="post">
+        <input type="text" name="username" placeholder="Enter your name">
+        <input type="submit" value="Submit">
+    </form>
     
-    post {
-        success {
-            echo 'Pipeline completed successfully!'
-            echo 'Application deployed at: http://192.168.1.27:8084/webapp-project'
+    <%
+        String username = request.getParameter("username");
+        if (username != null && !username.isEmpty()) {
+    %>
+        <h2>Hello, <%= username %>!</h2>
+    <%
         }
-        failure {
-            echo 'Pipeline failed! Check the logs for details.'
-        }
-    }
-}
+    %>
+    
+</body>
+</html>
