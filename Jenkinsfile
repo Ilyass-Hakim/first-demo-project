@@ -8,7 +8,7 @@ pipeline {
     triggers {
         // Trigger build on GitHub push events
         githubPush()
-         pollSCM('H/2 * * * *')
+         pollSCM('H/3 * * * *')
     }
     
     stages {
