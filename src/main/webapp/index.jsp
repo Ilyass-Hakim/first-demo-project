@@ -9,7 +9,7 @@
     
     <%
         String message = "Welcome to my simple JSP page";
-        int number = 42;
+        int number = 47;
     %>
     
     <p><%= message %></p>
