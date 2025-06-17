@@ -8,7 +8,7 @@ pipeline {
     triggers {
         // Trigger build on GitHub push events
         githubPush()
-         pollSCM('H/10 * * * *')
+        pollSCM('H/10 * * * *')
     }
     
     stages {
@@ -30,6 +30,15 @@ pipeline {
             steps {
                 echo 'Running tests...'
                 sh 'mvn test'
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                echo 'Running SonarQube analysis...'
+                withSonarQubeEnv('sq1') {
+                    sh 'mvn sonar:sonar'
+                }
             }
         }
         
