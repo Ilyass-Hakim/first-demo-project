@@ -18,10 +18,10 @@ pipeline {
         K8S_DEPLOYMENT_NAME = 'webapp-project'
         
         // Ansible Configuration
-        ANSIBLE_SERVER = 'your-ansible-server-ip'  // Update with your Ansible server IP
-        ANSIBLE_USER = 'your-ansible-user'         // Update with your Ansible user
-        ANSIBLE_PRIVATE_KEY = 'ansible-ssh-key-id' // Jenkins credential ID for Ansible SSH key
-        KUBECONFIG_CREDENTIAL = 'kubeconfig-file'  // Jenkins credential ID for kubeconfig file
+        ANSIBLE_SERVER = 'your-ansible-server-ip' 
+        ANSIBLE_USER = 'your-ansible-user'         
+        ANSIBLE_PRIVATE_KEY = 'ansible-ssh-key-id' 
+        KUBECONFIG_CREDENTIAL = 'working-kubeconfig'  
     }
     
     stages {
