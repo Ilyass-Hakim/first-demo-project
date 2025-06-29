@@ -1,5 +1,5 @@
 ---
-- hosts: centos-node
+- hosts: k8s_nodes
   become: yes
   tasks:
     - name: Create Kubernetes deployment using kubectl
