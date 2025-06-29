@@ -148,7 +148,7 @@ pipeline {
                 rm -rf /tmp/kube
             '''
             archiveArtifacts artifacts: 'target/*.war', allowEmptyArchive: true
-            junit 'target/surefire-reports/*.xml'
+            junit testResultsPattern: 'target/surefire-reports/*.xml', allowEmptyResults: true
         }
         success {
             echo 'Pipeline completed successfully!'
