@@ -22,9 +22,9 @@ pipeline {
         KUBECONFIG_CREDENTIAL = 'working-kubeconfig'
         
         REPO_URL = 'https://github.com/Ilyass-Hakim/first-demo-project.git'
-        ANSIBLE_BASE_DIR = '/home/ansible/ansible/first-demo-project'
+        ANSIBLE_BASE_DIR = '/home/ansible/ansible/'
         INVENTORY_FILE = "${ANSIBLE_BASE_DIR}/inventories/hosts.yml"
-        PLAYBOOK_FILE = "${ANSIBLE_BASE_DIR}/kubernetes-deployment.yml"
+        PLAYBOOK_FILE = "${ANSIBLE_BASE_DIR}/first-demo-project/kubernetes-deployment.yml"
     }
     
     stages {
