@@ -1,0 +1,29 @@
+---
+- hosts: centos-node
+  become: yes
+  tasks:
+    - name: Create Kubernetes deployment using kubectl
+      shell: |
+        export KUBECONFIG=/tmp/kube/config
+        kubectl apply -f - <<EOF
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: {{ deployment_name }}
+          namespace: {{ k8s_namespace }}
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: webapp
+          template:
+            metadata:
+              labels:
+                app: webapp
+            spec:
+              containers:
+              - name: webapp-container
+                image: {{ docker_image }}
+                ports:
+                - containerPort: 8080
+        EOF
