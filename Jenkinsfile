@@ -8,20 +8,23 @@ pipeline {
         pollSCM('H/10 * * * *')
     }
     environment {
-        // Docker Hub Configuration (keeping your existing setup)
-        DOCKER_HUB_CREDENTIALS = 'dockerhub-token'  
-        DOCKER_HUB_USERNAME = 'ilyass10devops'                 
+        DOCKER_HUB_CREDENTIALS = 'dockerhub-token'
+        DOCKER_HUB_USERNAME = 'ilyass10devops'
         IMAGE_NAME = "${DOCKER_HUB_USERNAME}/webapp-project"
         
-        // Kubernetes Configuration
         K8S_NAMESPACE = 'default'
         K8S_DEPLOYMENT_NAME = 'webapp-project'
         
-        // Ansible Configuration
-        ANSIBLE_SERVER = 'your-ansible-server-ip' 
-        ANSIBLE_USER = 'your-ansible-user'         
-        ANSIBLE_PRIVATE_KEY = 'ansible-ssh-key-id' 
-        KUBECONFIG_CREDENTIAL = 'working-kubeconfig'  
+        ANSIBLE_SERVER = '192.168.1.12'
+        ANSIBLE_USER = 'ansible'
+        ANSIBLE_PRIVATE_KEY = 'ansible-ssh-key-id'
+        
+        KUBECONFIG_CREDENTIAL = 'working-kubeconfig'
+        
+        REPO_URL = 'https://github.com/Ilyass-Hakim/first-demo-project.git'
+        ANSIBLE_BASE_DIR = '/home/ansible/ansible'
+        INVENTORY_FILE = "${ANSIBLE_BASE_DIR}/inventories/hosts.yml"
+        PLAYBOOK_FILE = "${ANSIBLE_BASE_DIR}/kubernetes-deployment.yml"
     }
     
     stages {
@@ -67,7 +70,6 @@ pipeline {
                 echo 'Building Docker image...'
                 script {
                     dockerImage = docker.build("${IMAGE_NAME}:${BUILD_NUMBER}")
-                    // Also tag as latest
                     dockerImage.tag("latest")
                 }
             }
@@ -87,42 +89,46 @@ pipeline {
         
         stage('Deploy to Kubernetes via Ansible') {
             steps {
-                echo 'Deploying to Kubernetes using Ansible...'
-                script {
-                    // Create temporary inventory file for Ansible
-                    writeFile file: 'ansible-inventory.ini', text: """
-[k8s_nodes]
-${ANSIBLE_SERVER} ansible_user=${ANSIBLE_USER} ansible_ssh_private_key_file=/tmp/ansible_key
-
-[k8s_nodes:vars]
-ansible_python_interpreter=/usr/bin/python3
-"""
-                    
-                    // Copy SSH key and kubeconfig for Ansible
-                    withCredentials([
-                        sshUserPrivateKey(credentialsId: "${ANSIBLE_PRIVATE_KEY}", keyFileVariable: 'SSH_KEY'),
-                        file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG_FILE')
-                    ]) {
+                echo 'Deploying to Kubernetes via Ansible on remote server...'
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: "${ANSIBLE_PRIVATE_KEY}", keyFileVariable: 'SSH_KEY'),
+                    file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG_FILE')
+                ]) {
+                    script {
                         sh '''
-                            # Copy SSH key
                             cp ${SSH_KEY} /tmp/ansible_key
                             chmod 600 /tmp/ansible_key
                             
-                            # Copy kubeconfig
                             mkdir -p /tmp/kube
                             cp ${KUBECONFIG_FILE} /tmp/kube/config
                             chmod 600 /tmp/kube/config
                         '''
-                        
-                        // Run Ansible playbook
+
                         sh """
-                            ansible-playbook -i ansible-inventory.ini \
-                            -e docker_image=${IMAGE_NAME}:${BUILD_NUMBER} \
-                            -e k8s_namespace=${K8S_NAMESPACE} \
-                            -e deployment_name=${K8S_DEPLOYMENT_NAME} \
-                            -e dockerhub_username=${DOCKER_HUB_USERNAME} \
-                            -e build_number=${BUILD_NUMBER} \
-                            kubernetes-deployment.yml
+                        ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
+                          if [ -d "${ANSIBLE_BASE_DIR}/.git" ]; then
+                            cd ${ANSIBLE_BASE_DIR} && git pull;
+                          else
+                            git clone ${REPO_URL} ${ANSIBLE_BASE_DIR};
+                          fi
+                          mkdir -p /tmp/kube
+                        '
+                        """
+
+                        sh """
+                        scp -i /tmp/ansible_key -o StrictHostKeyChecking=no /tmp/kube/config ${ANSIBLE_USER}@${ANSIBLE_SERVER}:/tmp/kube/config
+                        """
+
+                        sh """
+                        ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
+                          ansible-playbook -i ${INVENTORY_FILE} \\
+                            -e docker_image=${IMAGE_NAME}:${BUILD_NUMBER} \\
+                            -e k8s_namespace=${K8S_NAMESPACE} \\
+                            -e deployment_name=${K8S_DEPLOYMENT_NAME} \\
+                            -e dockerhub_username=${DOCKER_HUB_USERNAME} \\
+                            -e build_number=${BUILD_NUMBER} \\
+                            ${PLAYBOOK_FILE}
+                        '
                         """
                     }
                 }
@@ -132,18 +138,13 @@ ansible_python_interpreter=/usr/bin/python3
     
     post {
         always {
-            // Clean up temporary files
+            echo 'Cleaning up...'
             sh '''
                 rm -f /tmp/ansible_key
-                rm -f ansible-inventory.ini
                 rm -rf /tmp/kube
             '''
-            
-            // Archive artifacts
             archiveArtifacts artifacts: 'target/*.war', allowEmptyArchive: true
-            
-            // Publish test results if available
-            publishTestResults testResultsPattern: 'target/surefire-reports/*.xml'
+            junit 'target/surefire-reports/*.xml'
         }
         success {
             echo 'Pipeline completed successfully!'
