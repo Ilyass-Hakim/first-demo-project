@@ -2,10 +2,22 @@
 - hosts: centos_nodes
   become: yes
   tasks:
+    - name: Create /tmp/kube directory
+      file:
+        path: /tmp/kube
+        state: directory
+        mode: '0755'
+    
+    - name: Copy kubeconfig from Ansible server
+      copy:
+        src: /tmp/kube/config
+        dest: /tmp/kube/config
+        mode: '0600'
+    
     - name: Create Kubernetes deployment using kubectl
       shell: |
         export KUBECONFIG=/tmp/kube/config
-        kubectl apply -f - <<EOF
+        /usr/local/bin/kubectl apply -f - <<EOF
         apiVersion: apps/v1
         kind: Deployment
         metadata:
