@@ -95,40 +95,44 @@ pipeline {
                     file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG_FILE')
                 ]) {
                     script {
+                        // Prepare SSH key and kubeconfig locally for copying
                         sh '''
                             cp ${SSH_KEY} /tmp/ansible_key
                             chmod 600 /tmp/ansible_key
-                            
+
                             mkdir -p /tmp/kube
                             cp ${KUBECONFIG_FILE} /tmp/kube/config
                             chmod 600 /tmp/kube/config
                         '''
 
+                        // Clone or pull repo on Ansible server
                         sh """
-                        ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
-                          if [ -d "${ANSIBLE_BASE_DIR}/.git" ]; then
-                            cd ${ANSIBLE_BASE_DIR} && git pull;
-                          else
-                            git clone ${REPO_URL} ${ANSIBLE_BASE_DIR};
-                          fi
-                          mkdir -p /tmp/kube
-                        '
+                            ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
+                              if [ -d "${ANSIBLE_BASE_DIR}/.git" ]; then
+                                cd ${ANSIBLE_BASE_DIR} && git pull;
+                              else
+                                git clone ${REPO_URL} ${ANSIBLE_BASE_DIR};
+                              fi
+                              mkdir -p /tmp/kube
+                            '
                         """
 
+                        // Copy kubeconfig to Ansible server
                         sh """
-                        scp -i /tmp/ansible_key -o StrictHostKeyChecking=no /tmp/kube/config ${ANSIBLE_USER}@${ANSIBLE_SERVER}:/tmp/kube/config
+                            scp -i /tmp/ansible_key -o StrictHostKeyChecking=no /tmp/kube/config ${ANSIBLE_USER}@${ANSIBLE_SERVER}:/tmp/kube/config
                         """
 
+                        // Run ansible-playbook on Ansible server
                         sh """
-                        ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
-                          ansible-playbook -i ${INVENTORY_FILE} \\
-                            -e docker_image=${IMAGE_NAME}:${BUILD_NUMBER} \\
-                            -e k8s_namespace=${K8S_NAMESPACE} \\
-                            -e deployment_name=${K8S_DEPLOYMENT_NAME} \\
-                            -e dockerhub_username=${DOCKER_HUB_USERNAME} \\
-                            -e build_number=${BUILD_NUMBER} \\
-                            ${PLAYBOOK_FILE}
-                        '
+                            ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
+                              ansible-playbook -i ${INVENTORY_FILE} \\
+                                -e docker_image=${IMAGE_NAME}:${BUILD_NUMBER} \\
+                                -e k8s_namespace=${K8S_NAMESPACE} \\
+                                -e deployment_name=${K8S_DEPLOYMENT_NAME} \\
+                                -e dockerhub_username=${DOCKER_HUB_USERNAME} \\
+                                -e build_number=${BUILD_NUMBER} \\
+                                ${PLAYBOOK_FILE}
+                            '
                         """
                     }
                 }
