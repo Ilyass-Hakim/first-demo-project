@@ -15,7 +15,7 @@ pipeline {
         K8S_NAMESPACE = 'default'
         K8S_DEPLOYMENT_NAME = 'webapp-project'
         
-        ANSIBLE_SERVER = '192.168.1.12'
+        ANSIBLE_SERVER = '192.168.1.33'
         ANSIBLE_USER = 'ansible'
         ANSIBLE_PRIVATE_KEY = 'ansible-ssh-key-id'
         
