@@ -3,7 +3,7 @@ FROM tomcat:11.0-jdk17
 # Remove default webapps
 RUN rm -rf /usr/local/tomcat/webapps/*
 
-# Add Artifactory credentials (you’ll replace with Jenkins secret later)
+# Add Artifactory credentials 
 ARG ARTIFACTORY_USER
 ARG ARTIFACTORY_PASS
 
