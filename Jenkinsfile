@@ -79,6 +79,14 @@ pipeline {
             steps {
                 echo 'Pushing Docker image to Docker Hub...'
                 script {
+                    sh '''
+                echo "Checking Docker version..."
+                docker --version
+
+                echo "Trying manual login to Docker Hub..."
+                echo $DOCKER_HUB_CREDENTIALS
+                docker login -u ${DOCKER_HUB_USERNAME} -p $(echo $DOCKER_HUB_PASSWORD)
+            '''
                     docker.withRegistry('https://registry.hub.docker.com', DOCKER_HUB_CREDENTIALS) {
                         dockerImage.push("${BUILD_NUMBER}")
                         dockerImage.push('latest')
