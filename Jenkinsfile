@@ -78,26 +78,17 @@ pipeline {
         
         
         stage('Push Docker Image') {
-    steps {
-        echo 'Pushing Docker image to Docker Hub...'
-        script {
-            // Debug: check Docker installation and login manually using password-stdin
-            sh '''
-                echo "Checking Docker version..."
-                docker --version
-
-                echo "Trying manual login to Docker Hub with password-stdin..."
-                echo ${DOCKER_HUB_PASSWORD} | docker login -u ${DOCKER_HUB_USERNAME} --password-stdin registry.hub.docker.com
-            '''
-
-            // Push with Jenkins credential helper
-            docker.withRegistry('https://registry.hub.docker.com', DOCKER_HUB_CREDENTIALS) {
-                dockerImage.push("${BUILD_NUMBER}")
-                dockerImage.push('latest')
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', DOCKER_HUB_CREDENTIALS) {
+                        dockerImage.push("${BUILD_NUMBER}")
+                        dockerImage.push('latest')
+                    }
+                }
             }
         }
-    }
-}
+        
+        }
 
 
         
