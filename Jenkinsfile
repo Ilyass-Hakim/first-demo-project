@@ -10,6 +10,7 @@ pipeline {
     environment {
         DOCKER_HUB_CREDENTIALS = 'dockerhub-token'
         DOCKER_HUB_USERNAME = 'ilyass10devops'
+        DOCKER_HUB_PASSWORD = credentials('dockerhub-token')
         IMAGE_NAME = "${DOCKER_HUB_USERNAME}/webapp-project"
         
         K8S_NAMESPACE = 'default'
@@ -75,18 +76,21 @@ pipeline {
             }
         }
         
+        
         stage('Push Docker Image') {
             steps {
                 echo 'Pushing Docker image to Docker Hub...'
                 script {
+                    // Debug: check Docker installation and login manually
                     sh '''
-                echo "Checking Docker version..."
-                docker --version
-
-                echo "Trying manual login to Docker Hub..."
-                echo $DOCKER_HUB_CREDENTIALS
-                docker login -u ${DOCKER_HUB_USERNAME} -p $(echo $DOCKER_HUB_PASSWORD)
-            '''
+                        echo "Checking Docker version..."
+                        docker --version
+        
+                        echo "Trying manual login to Docker Hub..."
+                        docker login -u ${DOCKER_HUB_USERNAME} -p ${DOCKER_HUB_PASSWORD} registry.hub.docker.com
+                    '''
+        
+                    // Push with Jenkins credential helper
                     docker.withRegistry('https://registry.hub.docker.com', DOCKER_HUB_CREDENTIALS) {
                         dockerImage.push("${BUILD_NUMBER}")
                         dockerImage.push('latest')
@@ -94,6 +98,7 @@ pipeline {
                 }
             }
         }
+
         
         stage('Deploy to Kubernetes via Ansible') {
             steps {
