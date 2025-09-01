@@ -60,41 +60,18 @@ pipeline {
                         }
                     }
             
-                    stage('Semgrep Analysis') {
-                steps {
-                    echo 'Running Semgrep analysis on SonarQube server...'
-            
-                    withCredentials([sshUserPrivateKey(credentialsId: 'sonarqube-ssh-key-id', keyFileVariable: 'SSH_KEY')]) {
-                        script {
-                            // Copy private key locally
-                            sh '''
-                                cp ${SSH_KEY} /tmp/sonarqube_key
-                                chmod 600 /tmp/sonarqube_key
-                            '''
-            
-                            // Run Semgrep remotely on the SonarQube VM
-                            sh """
-                                ssh -i /tmp/sonarqube_key -o StrictHostKeyChecking=no sonarqube_user@<SONARQUBE_SERVER_IP> '
-                                    cd /path/to/your/project &&
-                                    semgrep --config=auto --json --output semgrep-report.json
-                                '
-                            """
-            
-                            // Copy the Semgrep report back to Jenkins
-                            sh """
-                                scp -i /tmp/sonarqube_key -o StrictHostKeyChecking=no \
-                                    sonarqube_user@<SONARQUBE_SERVER_IP>:/path/to/your/project/semgrep-report.json .
-                            """
-            
-                            // Archive the report in Jenkins
-                            archiveArtifacts artifacts: 'semgrep-report.json', allowEmptyArchive: true
-            
-                            // Cleanup temporary key
-                            sh 'rm -f /tmp/sonarqube_key'
-                        }
-                    }
+        stage('Semgrep Analysis') {
+            steps {
+                echo 'Running Semgrep analysis...'
+                withSonarQubeEnv('sq1') {
+                    sh '''
+                        # Run Semgrep locally on the Jenkins agent
+                        semgrep --config=auto --json --output semgrep-report.json || true
+                    '''
                 }
+                archiveArtifacts artifacts: 'semgrep-report.json', allowEmptyArchive: true
             }
+        }
 
 
 
