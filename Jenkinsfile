@@ -54,47 +54,48 @@ pipeline {
         }
         
         stage('Test') {
-            steps {
-                echo 'Running tests...'
-                sh 'mvn test'
+                        steps {
+                            echo 'Running tests...'
+                            sh 'mvn test'
+                        }
+                    }
+            
+                    stage('Semgrep Analysis') {
+                steps {
+                    echo 'Running Semgrep analysis on SonarQube server...'
+            
+                    withCredentials([sshUserPrivateKey(credentialsId: 'sonarqube-ssh-key-id', keyFileVariable: 'SSH_KEY')]) {
+                        script {
+                            // Copy private key locally
+                            sh '''
+                                cp ${SSH_KEY} /tmp/sonarqube_key
+                                chmod 600 /tmp/sonarqube_key
+                            '''
+            
+                            // Run Semgrep remotely on the SonarQube VM
+                            sh """
+                                ssh -i /tmp/sonarqube_key -o StrictHostKeyChecking=no sonarqube_user@<SONARQUBE_SERVER_IP> '
+                                    cd /path/to/your/project &&
+                                    semgrep --config=auto --json --output semgrep-report.json
+                                '
+                            """
+            
+                            // Copy the Semgrep report back to Jenkins
+                            sh """
+                                scp -i /tmp/sonarqube_key -o StrictHostKeyChecking=no \
+                                    sonarqube_user@<SONARQUBE_SERVER_IP>:/path/to/your/project/semgrep-report.json .
+                            """
+            
+                            // Archive the report in Jenkins
+                            archiveArtifacts artifacts: 'semgrep-report.json', allowEmptyArchive: true
+            
+                            // Cleanup temporary key
+                            sh 'rm -f /tmp/sonarqube_key'
+                        }
+                    }
+                }
             }
-        }
 
-        stage('Semgrep Analysis') {
-    steps {
-        echo 'Running Semgrep analysis on remote server...'
-        
-        withCredentials([sshUserPrivateKey(credentialsId: "${ANSIBLE_PRIVATE_KEY}", keyFileVariable: 'SSH_KEY')]) {
-            script {
-                //  Copy the key locally and set correct permissions
-                sh '''
-                    cp ${SSH_KEY} /tmp/ansible_key
-                    chmod 600 /tmp/ansible_key
-                '''
-
-                //  Run Semgrep remotely on Ansible server
-                sh """
-                    ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
-                        cd ${ANSIBLE_BASE_DIR}/first-demo-project &&
-                        semgrep --config=auto --json --output semgrep-report.json
-                    '
-                """
-
-                // Copy the Semgrep JSON report back to Jenkins
-                sh """
-                    scp -i /tmp/ansible_key -o StrictHostKeyChecking=no \
-                        ${ANSIBLE_USER}@${ANSIBLE_SERVER}:${ANSIBLE_BASE_DIR}/first-demo-project/semgrep-report.json .
-                """
-
-                //  Archive the report in Jenkins
-                archiveArtifacts artifacts: 'semgrep-report.json', allowEmptyArchive: true
-            }
-        }
-
-        // Cleanup temporary key
-        sh 'rm -f /tmp/ansible_key'
-    }
-}
 
 
         
