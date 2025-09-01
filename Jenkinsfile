@@ -61,20 +61,41 @@ pipeline {
         }
 
         stage('Semgrep Analysis') {
-                steps {
-                    echo 'Running Semgrep analysis...'
-                    withCredentials([sshUserPrivateKey(credentialsId: "${ANSIBLE_PRIVATE_KEY}", keyFileVariable: 'SSH_KEY')]) {
-                        sh """
-                            ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
-                              cd ${ANSIBLE_BASE_DIR}/first-demo-project &&
-                              semgrep --config=auto --json --output semgrep-report.json
-                            '
-                            scp -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER}:${ANSIBLE_BASE_DIR}/first-demo-project/semgrep-report.json .
-                        """
-                    }
-                    archiveArtifacts artifacts: 'semgrep-report.json', allowEmptyArchive: true
-                }
+    steps {
+        echo 'Running Semgrep analysis on remote server...'
+        
+        withCredentials([sshUserPrivateKey(credentialsId: "${ANSIBLE_PRIVATE_KEY}", keyFileVariable: 'SSH_KEY')]) {
+            script {
+                //  Copy the key locally and set correct permissions
+                sh '''
+                    cp ${SSH_KEY} /tmp/ansible_key
+                    chmod 600 /tmp/ansible_key
+                '''
+
+                //  Run Semgrep remotely on Ansible server
+                sh """
+                    ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
+                        cd ${ANSIBLE_BASE_DIR}/first-demo-project &&
+                        semgrep --config=auto --json --output semgrep-report.json
+                    '
+                """
+
+                // Copy the Semgrep JSON report back to Jenkins
+                sh """
+                    scp -i /tmp/ansible_key -o StrictHostKeyChecking=no \
+                        ${ANSIBLE_USER}@${ANSIBLE_SERVER}:${ANSIBLE_BASE_DIR}/first-demo-project/semgrep-report.json .
+                """
+
+                //  Archive the report in Jenkins
+                archiveArtifacts artifacts: 'semgrep-report.json', allowEmptyArchive: true
             }
+        }
+
+        // Cleanup temporary key
+        sh 'rm -f /tmp/ansible_key'
+    }
+}
+
 
         
         stage('SonarQube Analysis') {
