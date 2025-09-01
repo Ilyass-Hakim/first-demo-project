@@ -35,6 +35,16 @@ pipeline {
                 checkout scm
             }
         }
+
+        stage('Gitleaks Scan') {
+                steps {
+                    echo 'Running Gitleaks secret scan...'
+                    sh '''
+                        gitleaks detect --source . --report-path gitleaks-report.json || true
+                    '''
+                    archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
+                }
+            }
         
         stage('Build') {
             steps {
@@ -49,6 +59,23 @@ pipeline {
                 sh 'mvn test'
             }
         }
+
+        stage('Semgrep Analysis') {
+                steps {
+                    echo 'Running Semgrep analysis...'
+                    withCredentials([sshUserPrivateKey(credentialsId: "${ANSIBLE_PRIVATE_KEY}", keyFileVariable: 'SSH_KEY')]) {
+                        sh """
+                            ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
+                              cd ${ANSIBLE_BASE_DIR}/first-demo-project &&
+                              semgrep --config=auto --json --output semgrep-report.json
+                            '
+                            scp -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER}:${ANSIBLE_BASE_DIR}/first-demo-project/semgrep-report.json .
+                        """
+                    }
+                    archiveArtifacts artifacts: 'semgrep-report.json', allowEmptyArchive: true
+                }
+            }
+
         
         stage('SonarQube Analysis') {
             steps {
