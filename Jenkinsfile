@@ -111,32 +111,37 @@ pipeline {
                     echo 'Running OWASP Dependency Check...'
                     sh '''
                         # Create persistent cache directory and reports directory
-                        mkdir -p /home/ilyass/owasp-data
-                        mkdir -p owasp-reports
-                        
-                        # Set proper permissions
-                        chmod 755 owasp-reports
-                        
-                        # Run with cached database (much faster after first run)
-                        docker run --rm \\
-                            -v "$WORKSPACE":/src:ro \\
-                            -v "$WORKSPACE/owasp-reports":/reports \\
-                            -v "/home/ilyass/owasp-data":/usr/share/dependency-check/data \\
-                            --user $(id -u):$(id -g) \\
-                            owasp/dependency-check:latest \\
-                            --scan /src \\
-                            --format JSON \\
-                            --format HTML \\
-                            --out /reports \\
-                            --project "webapp-project-${BUILD_NUMBER}"
-                        
-                        # List generated reports
-                        echo "Generated OWASP reports:"
-                        ls -la owasp-reports/
-                    '''
-                    archiveArtifacts artifacts: 'owasp-reports/*', allowEmptyArchive: true
-                }
+                             stage('OWASP Dependency Check') {
+            agent { label 'maven_build_server' }
+            steps {
+                echo 'Running OWASP Dependency Check...'
+                sh '''
+                    # Create persistent cache directory that Jenkins can access
+                    sudo mkdir -p /opt/owasp-data
+                    sudo chown jenkins:jenkins /opt/owasp-data
+                    
+                    # Create reports directory
+                    mkdir -p owasp-reports
+                    
+                    # Run OWASP Dependency Check with cached database
+                    docker run --rm \\
+                        -v "$WORKSPACE":/src:ro \\
+                        -v "$WORKSPACE/owasp-reports":/reports \\
+                        -v "/opt/owasp-data":/usr/share/dependency-check/data \\
+                        owasp/dependency-check:latest \\
+                        --scan /src \\
+                        --format JSON \\
+                        --format HTML \\
+                        --out /reports \\
+                        --project "webapp-project-${BUILD_NUMBER}"
+                    
+                    # List generated reports
+                    echo "Generated OWASP reports:"
+                    ls -la owasp-reports/
+                '''
+                archiveArtifacts artifacts: 'owasp-reports/*', allowEmptyArchive: true
             }
+        }
         // NEW STAGE: Upload Reports to DefectDojo
         stage('Upload Reports to DefectDojo') {
             agent { label 'maven_build_server' }
