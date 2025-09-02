@@ -37,14 +37,19 @@ pipeline {
         }
 
         stage('Gitleaks Scan') {
-                steps {
-                    echo 'Running Gitleaks secret scan...'
-                    sh '''
-                        gitleaks detect --source . --report-path gitleaks-report.json || true
-                    '''
-                    archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
-                }
-            }
+    steps {
+        echo 'Running Gitleaks secret scan...'
+        sh '''
+            gitleaks detect --source . --report-format json --report-path gitleaks-report.json || true
+            # Create empty report if none exists
+            if [ ! -f "gitleaks-report.json" ]; then
+                echo "[]" > gitleaks-report.json
+            fi
+            ls -la gitleaks-report.json
+        '''
+        archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
+    }
+}
         
         stage('Build') {
             steps {
