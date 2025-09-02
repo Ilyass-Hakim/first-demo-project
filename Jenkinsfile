@@ -60,25 +60,29 @@ pipeline {
                         }
                     }
             
-    stage('Run Semgrep remotely') {
-            steps {
-                sshagent(['sonarqube-server-credentials']) {
-                    sh '''
-                        # Ensure the remote project folder exists
-                        ssh sonarqube@192.168.1.30 "mkdir -p /home/sonarqube/projects/firstDevopsProject"
-        
-                        # Sync the Jenkins workspace to the remote server
-                        rsync -avz --delete $WORKSPACE/ sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/
-        
-                        # Run Semgrep on the remote server
-                        ssh sonarqube@192.168.1.30 "cd /home/sonarqube/projects/firstDevopsProject && /opt/ci-scripts/run-semgrep.sh"
-        
-                        # Copy the Semgrep report back to Jenkins workspace
-                        scp sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
-                    '''
-                }
-            }
+stage('Run Semgrep remotely') {
+    steps {
+        sshagent(['sonarqube-server-credentials']) {
+            sh '''
+                # Add host key to known_hosts if not already present
+                mkdir -p ~/.ssh
+                ssh-keyscan -H 192.168.1.30 >> ~/.ssh/known_hosts 2>/dev/null || true
+                
+                # Ensure the remote project folder exists
+                ssh sonarqube@192.168.1.30 "mkdir -p /home/sonarqube/projects/firstDevopsProject"
+
+                # Sync the Jenkins workspace to the remote server
+                rsync -avz --delete $WORKSPACE/ sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/
+
+                # Run Semgrep on the remote server
+                ssh sonarqube@192.168.1.30 "cd /home/sonarqube/projects/firstDevopsProject && /opt/ci-scripts/run-semgrep.sh"
+
+                # Copy the Semgrep report back to Jenkins workspace
+                scp sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
+            '''
         }
+    }
+}
         
     stage('Archive Semgrep Report') {
         steps {
