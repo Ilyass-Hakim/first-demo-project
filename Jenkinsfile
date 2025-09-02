@@ -60,18 +60,21 @@ pipeline {
                         }
                     }
             
-        stage('Semgrep Analysis') {
+     stage('Run Semgrep remotely') {
             steps {
-                echo 'Running Semgrep analysis...'
-                withSonarQubeEnv('sq1') {
+                sshagent(['sonarqube-server-credentials']) {
                     sh '''
-                        # Run Semgrep locally on the Jenkins agent
-                        semgrep --config=auto --json --output semgrep-report.json || true
+                        mkdir -p /opt/projects/firstDevopsProject &&
+                        cd /opt/projects/firstDevopsProject &&
+                        git clone https://github.com/Ilyass-Hakim/first-demo-project.git . &&
+                        /opt/ci-scripts/run-semgrep.sh
+                        '
+                        scp sonarqube@192.168.1.30:/opt/projects/my-app/semgrep-report.json .
                     '''
                 }
-                archiveArtifacts artifacts: 'semgrep-report.json', allowEmptyArchive: true
             }
-        }
+            }
+
 
 
 
