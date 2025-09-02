@@ -26,6 +26,11 @@ pipeline {
         ANSIBLE_BASE_DIR = '/home/ansible/ansible/'
         INVENTORY_FILE = "${ANSIBLE_BASE_DIR}/inventories/hosts.yml"
         PLAYBOOK_FILE = "${ANSIBLE_BASE_DIR}/first-demo-project/kubernetes-deployment.yml"
+        
+        // DefectDojo Configuration
+        DEFECTDOJO_URL = 'http://192.168.1.24:8081'
+        DEFECTDOJO_USER = 'admin'
+        DEFECTDOJO_PASSWORD = 'admin123'
     }
     
     stages {
@@ -36,24 +41,24 @@ pipeline {
             }
         }
 
-      stage('Gitleaks Scan') {
-    steps {
-        echo 'Running Gitleaks secret scan...'
-        sh '''
-            # Run gitleaks and capture the exit code
-            gitleaks detect --source . --report-path gitleaks-report.json || exit_code=$?
-            
-            # If no report was created (no secrets found), create a proper empty report
-            if [ ! -f "gitleaks-report.json" ]; then
-                echo '{"results":[]}' > gitleaks-report.json
-                echo "No secrets found - created clean report"
-            else
-                echo "Secrets detected - report generated"
-            fi
-        '''
-        archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
-    }
-}
+        stage('Gitleaks Scan') {
+            steps {
+                echo 'Running Gitleaks secret scan...'
+                sh '''
+                    # Run gitleaks and capture the exit code
+                    gitleaks detect --source . --report-path gitleaks-report.json || exit_code=$?
+                    
+                    # If no report was created (no secrets found), create a proper empty report
+                    if [ ! -f "gitleaks-report.json" ]; then
+                        echo '{"results":[]}' > gitleaks-report.json
+                        echo "No secrets found - created clean report"
+                    else
+                        echo "Secrets detected - report generated"
+                    fi
+                '''
+                archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
+            }
+        }
         
         stage('Build') {
             steps {
@@ -63,47 +68,181 @@ pipeline {
         }
         
         stage('Test') {
-                        steps {
-                            echo 'Running tests...'
-                            sh 'mvn test'
-                        }
-                    }
+            steps {
+                echo 'Running tests...'
+                sh 'mvn test'
+            }
+        }
             
-stage('Run Semgrep remotely') {
-    steps {
-        sshagent(['sonarqube-server-credentials']) {
-            sh '''
-                # Add host key to known_hosts if not already present
-                mkdir -p ~/.ssh
-                ssh-keyscan -H 192.168.1.30 >> ~/.ssh/known_hosts 2>/dev/null || true
-                
-                # Ensure the remote project folder exists
-                ssh sonarqube@192.168.1.30 "mkdir -p /home/sonarqube/projects/firstDevopsProject"
+        stage('Run Semgrep remotely') {
+            steps {
+                sshagent(['sonarqube-server-credentials']) {
+                    sh '''
+                        # Add host key to known_hosts if not already present
+                        mkdir -p ~/.ssh
+                        ssh-keyscan -H 192.168.1.30 >> ~/.ssh/known_hosts 2>/dev/null || true
+                        
+                        # Ensure the remote project folder exists
+                        ssh sonarqube@192.168.1.30 "mkdir -p /home/sonarqube/projects/firstDevopsProject"
 
-                # Sync the Jenkins workspace to the remote server
-                rsync -avz --delete $WORKSPACE/ sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/
+                        # Sync the Jenkins workspace to the remote server
+                        rsync -avz --delete $WORKSPACE/ sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/
 
-                # Run Semgrep on the remote server
-                ssh sonarqube@192.168.1.30 "cd /home/sonarqube/projects/firstDevopsProject && /opt/ci-scripts/run-semgrep.sh"
+                        # Run Semgrep on the remote server
+                        ssh sonarqube@192.168.1.30 "cd /home/sonarqube/projects/firstDevopsProject && /opt/ci-scripts/run-semgrep.sh"
 
-                # Copy the Semgrep report back to Jenkins workspace
-                scp sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
-            '''
+                        # Copy the Semgrep report back to Jenkins workspace
+                        scp sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
+                    '''
+                }
+            }
         }
-    }
-}
         
-    stage('Archive Semgrep Report') {
-        steps {
-            archiveArtifacts artifacts: 'semgrep-report.json', fingerprint: true
+        stage('Archive Semgrep Report') {
+            steps {
+                archiveArtifacts artifacts: 'semgrep-report.json', fingerprint: true
+            }
         }
-    }
 
-
-
-
-
-
+        // NEW STAGE: OWASP Dependency Check
+        stage('OWASP Dependency Check') {
+            agent { label 'maven_build_server' }
+            steps {
+                echo 'Running OWASP Dependency Check...'
+                sh '''
+                    # Create reports directory
+                    mkdir -p owasp-reports
+                    
+                    # Run OWASP Dependency Check in Docker
+                    docker run --rm \\
+                        -v "$WORKSPACE":/src \\
+                        -v "$WORKSPACE/owasp-reports":/reports \\
+                        owasp/dependency-check:latest \\
+                        --scan /src \\
+                        --format JSON \\
+                        --format HTML \\
+                        --out /reports \\
+                        --project "webapp-project-${BUILD_NUMBER}" \\
+                        --enableRetired \\
+                        --enableExperimental
+                    
+                    # List generated reports
+                    echo "Generated OWASP reports:"
+                    ls -la owasp-reports/
+                '''
+                archiveArtifacts artifacts: 'owasp-reports/*', allowEmptyArchive: true
+            }
+        }
+        
+        // NEW STAGE: Upload Reports to DefectDojo
+        stage('Upload Reports to DefectDojo') {
+            agent { label 'maven_build_server' }
+            steps {
+                echo 'Uploading security reports to DefectDojo...'
+                script {
+                    // Get DefectDojo API token
+                    def apiToken = sh(
+                        script: '''
+                            # Get API token from DefectDojo
+                            curl -s -X POST "${DEFECTDOJO_URL}/api/v2/api-token-auth/" \\
+                                -H "Content-Type: application/json" \\
+                                -d "{\\"username\\":\\"${DEFECTDOJO_USER}\\",\\"password\\":\\"${DEFECTDOJO_PASSWORD}\\"}" \\
+                                | python3 -c "import sys, json; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "failed"
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (apiToken != "failed") {
+                        echo "✅ Successfully obtained DefectDojo API token"
+                        
+                        // Create or get product ID
+                        def productId = sh(
+                            script: """
+                                # Create product if it doesn't exist
+                                curl -s -X POST "${DEFECTDOJO_URL}/api/v2/products/" \\
+                                    -H "Authorization: Token ${apiToken}" \\
+                                    -H "Content-Type: application/json" \\
+                                    -d '{"name":"webapp-project","description":"Web Application Security Scans","prod_type":1}' \\
+                                    | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('id', ''))" 2>/dev/null || \\
+                                # If creation fails, try to get existing product
+                                curl -s -X GET "${DEFECTDOJO_URL}/api/v2/products/?name=webapp-project" \\
+                                    -H "Authorization: Token ${apiToken}" \\
+                                    | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['results'][0]['id'] if data['results'] else '')" 2>/dev/null || echo "1"
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "Using Product ID: ${productId}"
+                        
+                        // Upload Gitleaks report
+                        sh """
+                            if [ -f "gitleaks-report.json" ] && [ -s "gitleaks-report.json" ]; then
+                                echo "Uploading Gitleaks report..."
+                                curl -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
+                                    -H "Authorization: Token ${apiToken}" \\
+                                    -F "scan_date=\$(date +%Y-%m-%d)" \\
+                                    -F "minimum_severity=Info" \\
+                                    -F "active=true" \\
+                                    -F "verified=false" \\
+                                    -F "scan_type=Gitleaks Scan" \\
+                                    -F "product_name=webapp-project" \\
+                                    -F "file=@gitleaks-report.json" \\
+                                    -F "engagement_name=Jenkins-Build-${BUILD_NUMBER}"
+                                echo "✅ Gitleaks report uploaded"
+                            else
+                                echo "⚠️  No Gitleaks report to upload"
+                            fi
+                        """
+                        
+                        // Upload Semgrep report
+                        sh """
+                            if [ -f "semgrep-report.json" ] && [ -s "semgrep-report.json" ]; then
+                                echo "Uploading Semgrep report..."
+                                curl -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
+                                    -H "Authorization: Token ${apiToken}" \\
+                                    -F "scan_date=\$(date +%Y-%m-%d)" \\
+                                    -F "minimum_severity=Info" \\
+                                    -F "active=true" \\
+                                    -F "verified=false" \\
+                                    -F "scan_type=Semgrep JSON Report" \\
+                                    -F "product_name=webapp-project" \\
+                                    -F "file=@semgrep-report.json" \\
+                                    -F "engagement_name=Jenkins-Build-${BUILD_NUMBER}"
+                                echo "✅ Semgrep report uploaded"
+                            else
+                                echo "⚠️  No Semgrep report to upload"
+                            fi
+                        """
+                        
+                        // Upload OWASP Dependency Check report
+                        sh """
+                            if [ -f "owasp-reports/dependency-check-report.json" ]; then
+                                echo "Uploading OWASP Dependency Check report..."
+                                curl -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
+                                    -H "Authorization: Token ${apiToken}" \\
+                                    -F "scan_date=\$(date +%Y-%m-%d)" \\
+                                    -F "minimum_severity=Info" \\
+                                    -F "active=true" \\
+                                    -F "verified=false" \\
+                                    -F "scan_type=Dependency Check Scan" \\
+                                    -F "product_name=webapp-project" \\
+                                    -F "file=@owasp-reports/dependency-check-report.json" \\
+                                    -F "engagement_name=Jenkins-Build-${BUILD_NUMBER}"
+                                echo "✅ OWASP Dependency Check report uploaded"
+                            else
+                                echo "⚠️  No OWASP Dependency Check report to upload"
+                            fi
+                        """
+                        
+                        echo "🎉 All reports uploaded to DefectDojo!"
+                        echo "📊 View results at: ${DEFECTDOJO_URL}/product/webapp-project"
+                        
+                    } else {
+                        echo "❌ Failed to get DefectDojo API token. Skipping upload."
+                    }
+                }
+            }
+        }
         
         stage('SonarQube Analysis') {
             steps {
@@ -131,7 +270,6 @@ stage('Run Semgrep remotely') {
             }
         }
         
-        
         stage('Push Docker Image') {
             steps {
                 script {
@@ -142,10 +280,6 @@ stage('Run Semgrep remotely') {
                 }
             }
         }
-        
-        
-
-
         
         stage('Deploy to Kubernetes via Ansible') {
             steps {
