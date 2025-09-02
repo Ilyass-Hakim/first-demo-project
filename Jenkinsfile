@@ -66,7 +66,7 @@ pipeline {
                     sh '''
                         sudo mkdir -p /opt/projects/firstDevopsProject &&
                         cd /opt/projects/firstDevopsProject &&
-                        git clone https://github.com/Ilyass-Hakim/first-demo-project.git . &&
+                        sudo git clone https://github.com/Ilyass-Hakim/first-demo-project.git . &&
                         /opt/ci-scripts/run-semgrep.sh
                         '
                         scp sonarqube@192.168.1.30:/opt/projects/my-app/semgrep-report.json .
