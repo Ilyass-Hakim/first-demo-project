@@ -105,32 +105,24 @@ pipeline {
         }
 
         // NEW STAGE: OWASP Dependency Check
-   stage('OWASP Dependency Check') {
+stage('OWASP Dependency Check') {
     agent { label 'maven_build_server' }
     steps {
         echo 'Running OWASP Dependency Check...'
         sh '''
-            # Create persistent cache directory that Jenkins can access
-            sudo mkdir -p /opt/owasp-data
-            sudo chown jenkins:jenkins /opt/owasp-data
-            
-            # Create reports directory
             mkdir -p owasp-reports
             
-            # Run OWASP Dependency Check with cached database
             docker run --rm \\
-                -v "$WORKSPACE":/src:ro \\
+                -v "$WORKSPACE/target":/src:ro \\
                 -v "$WORKSPACE/owasp-reports":/reports \\
                 -v "/opt/owasp-data":/usr/share/dependency-check/data \\
                 owasp/dependency-check:latest \\
                 --scan /src \\
                 --format JSON \\
-                --format HTML \\
                 --out /reports \\
-                --project "webapp-project-${BUILD_NUMBER}"
-            
-            # List generated reports
-            echo "Generated OWASP reports:"
+                --project "webapp-project-${BUILD_NUMBER}" \\
+                --noupdate
+                
             ls -la owasp-reports/
         '''
         archiveArtifacts artifacts: 'owasp-reports/*', allowEmptyArchive: true
