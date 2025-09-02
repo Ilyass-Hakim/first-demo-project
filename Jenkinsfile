@@ -64,7 +64,7 @@ pipeline {
             steps {
                 sshagent(['sonarqube-server-credentials']) {
                     sh '''
-                        mkdir -p /opt/projects/firstDevopsProject &&
+                        sudo mkdir -p /opt/projects/firstDevopsProject &&
                         cd /opt/projects/firstDevopsProject &&
                         git clone https://github.com/Ilyass-Hakim/first-demo-project.git . &&
                         /opt/ci-scripts/run-semgrep.sh
