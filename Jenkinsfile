@@ -60,25 +60,32 @@ pipeline {
                         }
                     }
             
-     stage('Run Semgrep remotely') {
+    stage('Run Semgrep remotely') {
             steps {
                 sshagent(['sonarqube-server-credentials']) {
                     sh '''
-                        # Copy workspace to SonarQube server
+                        # Ensure the remote project folder exists
+                        ssh sonarqube@192.168.1.30 "mkdir -p /home/sonarqube/projects/firstDevopsProject"
+        
+                        # Sync the Jenkins workspace to the remote server
                         rsync -avz --delete $WORKSPACE/ sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/
         
-                        # Run Semgrep on the server
-                        ssh sonarqube@192.168.1.30 '
-                            cd /home/sonarqube/projects/firstDevopsProject &&
-                            /opt/ci-scripts/run-semgrep.sh
-                        '
+                        # Run Semgrep on the remote server
+                        ssh sonarqube@192.168.1.30 "cd /home/sonarqube/projects/firstDevopsProject && /opt/ci-scripts/run-semgrep.sh"
         
-                        # Copy report back to Jenkins
+                        # Copy the Semgrep report back to Jenkins workspace
                         scp sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
                     '''
                 }
             }
         }
+        
+    stage('Archive Semgrep Report') {
+        steps {
+            archiveArtifacts artifacts: 'semgrep-report.json', fingerprint: true
+        }
+    }
+
 
 
 
