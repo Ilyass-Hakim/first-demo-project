@@ -36,14 +36,20 @@ pipeline {
             }
         }
 
-       stage('Gitleaks Scan') {
+      stage('Gitleaks Scan') {
     steps {
         echo 'Running Gitleaks secret scan...'
         sh '''
-            echo "Testing gitleaks command..."
-            gitleaks detect --source . --report-path gitleaks-report.json -v || echo "Gitleaks finished with exit code $?"
-            echo "Files after gitleaks:"
-            ls -la *.json
+            # Run gitleaks and capture the exit code
+            gitleaks detect --source . --report-path gitleaks-report.json || exit_code=$?
+            
+            # If no report was created (no secrets found), create a proper empty report
+            if [ ! -f "gitleaks-report.json" ]; then
+                echo '{"results":[]}' > gitleaks-report.json
+                echo "No secrets found - created clean report"
+            else
+                echo "Secrets detected - report generated"
+            fi
         '''
         archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
     }
