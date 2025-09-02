@@ -105,13 +105,7 @@ pipeline {
         }
 
         // NEW STAGE: OWASP Dependency Check
-            stage('OWASP Dependency Check') {
-                agent { label 'maven_build_server' }
-                steps {
-                    echo 'Running OWASP Dependency Check...'
-                    sh '''
-                        # Create persistent cache directory and reports directory
-                             stage('OWASP Dependency Check') {
+   tage('OWASP Dependency Check') {
             agent { label 'maven_build_server' }
             steps {
                 echo 'Running OWASP Dependency Check...'
@@ -142,6 +136,7 @@ pipeline {
                 archiveArtifacts artifacts: 'owasp-reports/*', allowEmptyArchive: true
             }
         }
+        
         // NEW STAGE: Upload Reports to DefectDojo
         stage('Upload Reports to DefectDojo') {
             agent { label 'maven_build_server' }
