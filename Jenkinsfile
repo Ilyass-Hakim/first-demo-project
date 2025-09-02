@@ -64,17 +64,22 @@ pipeline {
             steps {
                 sshagent(['sonarqube-server-credentials']) {
                     sh '''
-                       ssh sonarqube@192.168.1.30 '
-                         mkdir -p /home/sonarqube/projects/firstDevopsProject &&
-                        cd /home/sonarqube/projects/firstDevopsProject &&
-                         git clone https://github.com/Ilyass-Hakim/first-demo-project.git . &&
-                        /opt/ci-scripts/run-semgrep.sh
+                        # Copy workspace to SonarQube server
+                        rsync -avz --delete $WORKSPACE/ sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/
+        
+                        # Run Semgrep on the server
+                        ssh sonarqube@192.168.1.30 '
+                            cd /home/sonarqube/projects/firstDevopsProject &&
+                            /opt/ci-scripts/run-semgrep.sh
                         '
-                        scp sonarqube@192.168.1.30:/opt/projects/my-app/semgrep-report.json .
+        
+                        # Copy report back to Jenkins
+                        scp sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
                     '''
                 }
             }
-            }
+        }
+
 
 
 
