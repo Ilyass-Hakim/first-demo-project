@@ -163,17 +163,17 @@ stage('OWASP Dependency-Check') {
                     if (fileExists == 'yes') {
                         echo "Uploading ${filePath} as ${scanType}..."
                         sh """
-                            curl -v -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
-                                -H "Authorization: Token ${API_TOKEN}" \\
-                                -F "scan_date=$(date +%Y-%m-%d)" \\
-                                -F "minimum_severity=Info" \\
-                                -F "active=true" \\
-                                -F "verified=false" \\
-                                -F "scan_type=${scanType}" \\
-                                -F "product_name=${productName}" \\
-                                -F "file=@${filePath}" \\
-                                -F "engagement_name=Jenkins-Build-${BUILD_NUMBER}"
-                        """
+                                curl -v -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
+                                    -H "Authorization: Token ${API_TOKEN}" \\
+                                    -F "scan_date=\$(date +%Y-%m-%d)" \\
+                                    -F "minimum_severity=Info" \\
+                                    -F "active=true" \\
+                                    -F "verified=false" \\
+                                    -F "scan_type=${scanType}" \\
+                                    -F "product_name=${productName}" \\
+                                    -F "file=@${filePath}" \\
+                                    -F "engagement_name=Jenkins-Build-${BUILD_NUMBER}"
+                            """
                         echo "✅ Uploaded ${filePath}"
                     } else {
                         echo "⚠️ File ${filePath} does not exist or is empty. Skipping."
