@@ -138,7 +138,7 @@ stage('OWASP Dependency-Check') {
 
    
         // NEW STAGE: Upload Reports to DefectDojo
-   stage('Upload Reports to DefectDojo') {
+stage('Upload Reports to DefectDojo') {
     agent { label 'maven_build_server' }
     steps {
         withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'API_TOKEN')]) {
@@ -149,7 +149,7 @@ stage('OWASP Dependency-Check') {
                 def engagementName = 'Jenkins-Build'
                 def engagementDesc = "Automated engagement for ${productName}"
 
-                // Check if product exists and get product ID
+                // Get product ID
                 def productId = sh(script: """curl -s -H "Authorization: Token ${API_TOKEN}" \
                     "${DEFECTDOJO_URL}/api/v2/products/?name=${productName}" | jq -r '.results[0].id'""",
                     returnStdout: true).trim()
@@ -159,12 +159,12 @@ stage('OWASP Dependency-Check') {
                 }
                 echo "✅ Found product ID: ${productId}"
 
-                // Check if engagement exists
+                // Get engagement ID
                 def engagementId = sh(script: """curl -s -H "Authorization: Token ${API_TOKEN}" \
                     "${DEFECTDOJO_URL}/api/v2/engagements/?name=${engagementName}&product=${productId}" | jq -r '.results[0].id'""",
                     returnStdout: true).trim()
 
-                // If engagement doesn't exist, create it
+                // Create engagement if not exists
                 if (engagementId == "null" || engagementId == "") {
                     echo "Engagement not found. Creating new engagement..."
                     engagementId = sh(script: """curl -s -X POST "${DEFECTDOJO_URL}/api/v2/engagements/" \
@@ -173,10 +173,10 @@ stage('OWASP Dependency-Check') {
                         -d '{
                             "name": "${engagementName}",
                             "description": "${engagementDesc}",
-                            "product": ${productId},
+                            "product": '${productId}',
                             "status": "In Progress",
-                            "target_start": "$(date +%Y-%m-%d)",
-                            "target_end": "$(date +%Y-%m-%d)"
+                            "target_start": "'$(date +%Y-%m-%d)'",
+                            "target_end": "'$(date +%Y-%m-%d)'"
                         }' | jq -r '.id'""", returnStdout: true).trim()
                     echo "✅ Created engagement ID: ${engagementId}"
                 } else {
@@ -190,11 +190,11 @@ stage('OWASP Dependency-Check') {
                     [file: 'semgrep-report.json', scanType: 'Semgrep JSON Report']
                 ]
 
+                // Upload each report
                 for (r in reports) {
                     def filePath = r.file
                     def scanType = r.scanType
 
-                    // Only upload if file exists and non-empty
                     def fileExists = sh(script: "[ -f '${filePath}' ] && [ -s '${filePath}' ] && echo 'yes' || echo 'no'", returnStdout: true).trim()
                     if (fileExists == 'yes') {
                         echo "Uploading ${filePath} as ${scanType}..."
@@ -220,6 +220,7 @@ stage('OWASP Dependency-Check') {
         }
     }
 }
+
 
         
         stage('SonarQube Analysis') {
