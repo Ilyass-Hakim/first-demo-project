@@ -225,11 +225,11 @@ stage('Upload Reports to DefectDojo') {
                 }
 
                 // Reports to upload with CORRECT scanner types
-                def reports = [
-                    [file: 'gitleaks-report.json', scanType: 'Gitleaks Scan', description: 'Secret detection scan'],
-                    [file: 'owasp-reports/dependency-check-report.json', scanType: 'Dependency Check Scan', description: 'OWASP dependency vulnerabilities'],
-                    [file: 'semgrep-report.json', scanType: 'Semgrep JSON Report', description: 'Static code analysis']
-                ]
+               def reports = [
+                [file: 'gitleaks-report.json', scanType: 'Generic Findings Import'],
+                [file: 'owasp-reports/dependency-check-report.json', scanType: 'Generic Findings Import'],
+                [file: 'semgrep-report.json', scanType: 'Generic Findings Import']
+            ]
 
                 // Upload each report with better error handling
                 for (r in reports) {
