@@ -41,24 +41,25 @@ pipeline {
             }
         }
 
-        stage('Gitleaks Scan') {
-            steps {
-                echo 'Running Gitleaks secret scan...'
-                sh '''
-                    # Run gitleaks and capture the exit code
-                    gitleaks detect --source . --report-path gitleaks-report.json || exit_code=$?
-                    
-                    # If no report was created (no secrets found), create a proper empty report
-                    if [ ! -f "gitleaks-report.json" ]; then
-                        echo '{"results":[]}' > gitleaks-report.json
-                        echo "No secrets found - created clean report"
-                    else
-                        echo "Secrets detected - report generated"
-                    fi
-                '''
-                archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
-            }
-        }
+ stage('Gitleaks Scan') {
+    steps {
+        echo 'Running Gitleaks secret scan...'
+        sh '''
+            # Run gitleaks
+            gitleaks detect --source . --report-path $WORKSPACE/gitleaks-report.json || exit_code=$?
+            
+            # Ensure report exists even if no secrets found
+            if [ ! -f "$WORKSPACE/gitleaks-report.json" ]; then
+                echo '{"results":[]}' > $WORKSPACE/gitleaks-report.json
+                echo "No secrets found - created clean report"
+            else
+                echo "Secrets detected - report generated"
+            fi
+        '''
+        archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
+    }
+}
+
         
         stage('Build') {
             steps {
@@ -74,44 +75,40 @@ pipeline {
             }
         }
             
-        stage('Run Semgrep remotely') {
-            steps {
-                sshagent(['sonarqube-server-credentials']) {
-                    sh '''
-                        # Add host key to known_hosts if not already present
-                        mkdir -p ~/.ssh
-                        ssh-keyscan -H 192.168.1.30 >> ~/.ssh/known_hosts 2>/dev/null || true
-                        
-                        # Ensure the remote project folder exists
-                        ssh sonarqube@192.168.1.30 "mkdir -p /home/sonarqube/projects/firstDevopsProject"
+  stage('Run Semgrep remotely') {
+    steps {
+        sshagent(['sonarqube-server-credentials']) {
+            sh '''
+                mkdir -p ~/.ssh
+                ssh-keyscan -H 192.168.1.30 >> ~/.ssh/known_hosts 2>/dev/null || true
+                
+                ssh sonarqube@192.168.1.30 "mkdir -p /home/sonarqube/projects/firstDevopsProject"
 
-                        # Sync the Jenkins workspace to the remote server
-                        rsync -avz --delete $WORKSPACE/ sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/
+                rsync -avz --delete $WORKSPACE/ sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/
 
-                        # Run Semgrep on the remote server
-                        ssh sonarqube@192.168.1.30 "cd /home/sonarqube/projects/firstDevopsProject && /opt/ci-scripts/run-semgrep.sh"
+                ssh sonarqube@192.168.1.30 "cd /home/sonarqube/projects/firstDevopsProject && /opt/ci-scripts/run-semgrep.sh"
 
-                        # Copy the Semgrep report back to Jenkins workspace
-                        scp sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
-                    '''
-                }
-            }
+                # Copy report back to Jenkins workspace
+                scp sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
+            '''
         }
-        
-        stage('Archive Semgrep Report') {
-            steps {
-                archiveArtifacts artifacts: 'semgrep-report.json', fingerprint: true
-            }
-        }
+    }
+}
+
+stage('Archive Semgrep Report') {
+    steps {
+        archiveArtifacts artifacts: 'semgrep-report.json', fingerprint: true
+    }
+}
+
 
         // NEW STAGE: OWASP Dependency Check
 stage('OWASP Dependency-Check') {
     agent { label 'maven_build_server' }
     steps {
         script {
+            sh 'mkdir -p $WORKSPACE/owasp-reports'
 
-
-            // Run OWASP Dependency-Check Docker scan
             sh """
             docker run --rm \\
                 -v "$WORKSPACE":/src \\
@@ -124,16 +121,17 @@ stage('OWASP Dependency-Check') {
                 --project "webapp-project-\$BUILD_NUMBER"
             """
 
-            // Show report
             sh 'ls -la $WORKSPACE/owasp-reports'
         }
     }
 }
-        stage('Publish OWASP Report') {
+
+stage('Publish OWASP Report') {
     steps {
         archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.json', allowEmptyArchive: false
     }
 }
+
 
 
    
@@ -143,79 +141,56 @@ stage('Upload Reports to DefectDojo') {
     steps {
         withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'API_TOKEN')]) {
             script {
-                echo "Using DefectDojo token from Jenkins credentials."
-
                 def productName = 'webapp-project'
                 def engagementName = 'Jenkins-Build'
                 def engagementDesc = "Automated engagement for ${productName}"
 
-                // Get product ID
-                def productId = sh(script: 'curl -s -H "Authorization: Token ' + API_TOKEN + '" ' +
-                    '"' + DEFECTDOJO_URL + '/api/v2/products/?name=' + productName + '" | jq -r \'.results[0].id\'',
+                def productId = sh(script: """curl -s -H "Authorization: Token ${API_TOKEN}" \
+                    "${DEFECTDOJO_URL}/api/v2/products/?name=${productName}" | jq -r '.results[0].id'""",
                     returnStdout: true).trim()
+                if (!productId) error "❌ Product '${productName}' does not exist."
 
-                if (productId == "null" || productId == "") {
-                    error "❌ Product '${productName}' does not exist in DefectDojo. Create it first."
-                }
-                echo "✅ Found product ID: ${productId}"
+                def engagementId = sh(script: """curl -s -H "Authorization: Token ${API_TOKEN}" \
+                    "${DEFECTDOJO_URL}/api/v2/engagements/?name=${engagementName}&product=${productId}" \
+                    | jq -r '.results[0].id'""", returnStdout: true).trim()
 
-                // Get engagement ID
-                def engagementId = sh(script: 'curl -s -H "Authorization: Token ' + API_TOKEN + '" ' +
-                    '"' + DEFECTDOJO_URL + '/api/v2/engagements/?name=' + engagementName + '&product=' + productId + '" | jq -r \'.results[0].id\'',
-                    returnStdout: true).trim()
-
-                // Create engagement if not exists
-                if (engagementId == "null" || engagementId == "") {
-                    echo "Engagement not found. Creating new engagement..."
-                    engagementId = sh(script: 'curl -s -X POST "' + DEFECTDOJO_URL + '/api/v2/engagements/" ' +
-                        '-H "Authorization: Token ' + API_TOKEN + '" ' +
-                        '-H "Content-Type: application/json" ' +
-                        '-d \'{' +
-                        '"name": "' + engagementName + '",' +
-                        '"description": "' + engagementDesc + '",' +
-                        '"product": ' + productId + ',' +
-                        '"status": "In Progress",' +
-                        '"target_start": "' + sh(script: 'date +%Y-%m-%d', returnStdout: true).trim() + '",' +
-                        '"target_end": "' + sh(script: 'date +%Y-%m-%d', returnStdout: true).trim() + '"' +
-                        '}\' | jq -r \'.id\'',
-                        returnStdout: true).trim()
-                    echo "✅ Created engagement ID: ${engagementId}"
-                } else {
-                    echo "✅ Found existing engagement ID: ${engagementId}"
+                if (!engagementId || engagementId == "null") {
+                    engagementId = sh(script: """curl -s -X POST "${DEFECTDOJO_URL}/api/v2/engagements/" \
+                        -H "Authorization: Token ${API_TOKEN}" \
+                        -H "Content-Type: application/json" \
+                        -d '{
+                            "name": "${engagementName}",
+                            "description": "${engagementDesc}",
+                            "product": ${productId},
+                            "status": "In Progress",
+                            "target_start": "$(date +%Y-%m-%d)",
+                            "target_end": "$(date +%Y-%m-%d)"
+                        }' | jq -r '.id'""", returnStdout: true).trim()
                 }
 
-                // Reports to upload
                 def reports = [
-                    [file: 'gitleaks-report.json', scanType: 'Gitleaks Scan'],
-                    [file: 'owasp-reports/dependency-check-report.json', scanType: 'Dependency Check Scan'],
-                    [file: 'semgrep-report.json', scanType: 'Semgrep JSON Report']
+                    [file: "$WORKSPACE/gitleaks-report.json", scanType: 'Gitleaks Scan'],
+                    [file: "$WORKSPACE/owasp-reports/dependency-check-report.json", scanType: 'Dependency Check Scan'],
+                    [file: "$WORKSPACE/semgrep-report.json", scanType: 'Semgrep JSON Report']
                 ]
 
-                // Upload each report
                 for (r in reports) {
                     def filePath = r.file
                     def scanType = r.scanType
-
-                    def fileExists = sh(script: '[ -f "' + filePath + '" ] && [ -s "' + filePath + '" ] && echo "yes" || echo "no"', returnStdout: true).trim()
+                    def fileExists = sh(script: "[ -f '${filePath}' ] && [ -s '${filePath}' ] && echo yes || echo no", returnStdout: true).trim()
                     if (fileExists == 'yes') {
-                        echo "Uploading ${filePath} as ${scanType}..."
-                        sh('curl -s -X POST "' + DEFECTDOJO_URL + '/api/v2/import-scan/" ' +
-                            '-H "Authorization: Token ' + API_TOKEN + '" ' +
-                            '-F "engagement=' + engagementId + '" ' +
-                            '-F "scan_date=' + sh(script: 'date +%Y-%m-%d', returnStdout: true).trim() + '" ' +
-                            '-F "minimum_severity=Info" ' +
-                            '-F "active=true" ' +
-                            '-F "verified=false" ' +
-                            '-F "scan_type=' + scanType + '" ' +
-                            '-F "file=@' + filePath + '"'
-                        )
-                        echo "✅ Uploaded ${filePath}"
-                    } else {
-                        echo "⚠️ File ${filePath} does not exist or is empty. Skipping."
+                        sh """curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+                            -H "Authorization: Token ${API_TOKEN}" \
+                            -F "engagement=${engagementId}" \
+                            -F "scan_date=$(date +%Y-%m-%d)" \
+                            -F "minimum_severity=Info" \
+                            -F "active=true" \
+                            -F "verified=false" \
+                            -F "scan_type=${scanType}" \
+                            -F "file=@${filePath}" """
                     }
                 }
-
-                echo "🎉 All report uploads completed! Check DefectDojo engagement ID: ${engagementId}"
+                echo "✅ All reports uploaded!"
             }
         }
     }
