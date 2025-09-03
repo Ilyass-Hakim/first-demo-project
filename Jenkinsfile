@@ -138,114 +138,55 @@ stage('OWASP Dependency-Check') {
 
    
         // NEW STAGE: Upload Reports to DefectDojo
-        stage('Upload Reports to DefectDojo') {
-            agent { label 'maven_build_server' }
-            steps {
-                echo 'Uploading security reports to DefectDojo...'
-                script {
-                    // Get DefectDojo API token
-                    def apiToken = sh(
-                        script: '''
-                            # Get API token from DefectDojo
-                            curl -s -X POST "${DEFECTDOJO_URL}/api/v2/api-token-auth/" \\
-                                -H "Content-Type: application/json" \\
-                                -d "{\\"username\\":\\"${DEFECTDOJO_USER}\\",\\"password\\":\\"${DEFECTDOJO_PASSWORD}\\"}" \\
-                                | python3 -c "import sys, json; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "failed"
-                        ''',
-                        returnStdout: true
-                    ).trim()
-                    
-                    if (apiToken != "failed") {
-                        echo "✅ Successfully obtained DefectDojo API token"
-                        
-                        // Create or get product ID
-                        def productId = sh(
-                            script: """
-                                # Create product if it doesn't exist
-                                curl -s -X POST "${DEFECTDOJO_URL}/api/v2/products/" \\
-                                    -H "Authorization: Token ${apiToken}" \\
-                                    -H "Content-Type: application/json" \\
-                                    -d '{"name":"webapp-project","description":"Web Application Security Scans","prod_type":1}' \\
-                                    | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('id', ''))" 2>/dev/null || \\
-                                # If creation fails, try to get existing product
-                                curl -s -X GET "${DEFECTDOJO_URL}/api/v2/products/?name=webapp-project" \\
-                                    -H "Authorization: Token ${apiToken}" \\
-                                    | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['results'][0]['id'] if data['results'] else '')" 2>/dev/null || echo "1"
-                            """,
-                            returnStdout: true
-                        ).trim()
-                        
-                        echo "Using Product ID: ${productId}"
-                        
-                        // Upload Gitleaks report
+      stage('Upload Reports to DefectDojo') {
+    agent { label 'maven_build_server' }
+    steps {
+        withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'API_TOKEN')]) {
+            script {
+                echo "Using DefectDojo token from Jenkins credentials."
+
+                def productName = 'webapp-project'
+
+                // List of reports to upload
+                def reports = [
+                    [file: 'gitleaks-report.json', scanType: 'Gitleaks Scan'],
+                    [file: 'owasp-reports/dependency-check-report.json', scanType: 'Dependency Check Scan'],
+                    [file: 'semgrep-report.json', scanType: 'Semgrep JSON Report']
+                ]
+
+                for (r in reports) {
+                    def filePath = r.file
+                    def scanType = r.scanType
+
+                    // Check if file exists and is non-empty
+                    def fileExists = sh(script: "[ -f '${filePath}' ] && [ -s '${filePath}' ] && echo 'yes' || echo 'no'", returnStdout: true).trim()
+                    if (fileExists == 'yes') {
+                        echo "Uploading ${filePath} as ${scanType}..."
                         sh """
-                            if [ -f "gitleaks-report.json" ] && [ -s "gitleaks-report.json" ]; then
-                                echo "Uploading Gitleaks report..."
-                                curl -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
-                                    -H "Authorization: Token ${apiToken}" \\
-                                    -F "scan_date=\$(date +%Y-%m-%d)" \\
-                                    -F "minimum_severity=Info" \\
-                                    -F "active=true" \\
-                                    -F "verified=false" \\
-                                    -F "scan_type=Gitleaks Scan" \\
-                                    -F "product_name=webapp-project" \\
-                                    -F "file=@gitleaks-report.json" \\
-                                    -F "engagement_name=Jenkins-Build-${BUILD_NUMBER}"
-                                echo "✅ Gitleaks report uploaded"
-                            else
-                                echo "⚠️  No Gitleaks report to upload"
-                            fi
+                            curl -v -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
+                                -H "Authorization: Token ${API_TOKEN}" \\
+                                -F "scan_date=$(date +%Y-%m-%d)" \\
+                                -F "minimum_severity=Info" \\
+                                -F "active=true" \\
+                                -F "verified=false" \\
+                                -F "scan_type=${scanType}" \\
+                                -F "product_name=${productName}" \\
+                                -F "file=@${filePath}" \\
+                                -F "engagement_name=Jenkins-Build-${BUILD_NUMBER}"
                         """
-                        
-                        // Upload Semgrep report
-                        sh """
-                            if [ -f "semgrep-report.json" ] && [ -s "semgrep-report.json" ]; then
-                                echo "Uploading Semgrep report..."
-                                curl -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
-                                    -H "Authorization: Token ${apiToken}" \\
-                                    -F "scan_date=\$(date +%Y-%m-%d)" \\
-                                    -F "minimum_severity=Info" \\
-                                    -F "active=true" \\
-                                    -F "verified=false" \\
-                                    -F "scan_type=Semgrep JSON Report" \\
-                                    -F "product_name=webapp-project" \\
-                                    -F "file=@semgrep-report.json" \\
-                                    -F "engagement_name=Jenkins-Build-${BUILD_NUMBER}"
-                                echo "✅ Semgrep report uploaded"
-                            else
-                                echo "⚠️  No Semgrep report to upload"
-                            fi
-                        """
-                        
-                        // Upload OWASP Dependency Check report
-                        sh """
-                            if [ -f "owasp-reports/dependency-check-report.json" ]; then
-                                echo "Uploading OWASP Dependency Check report..."
-                                curl -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
-                                    -H "Authorization: Token ${apiToken}" \\
-                                    -F "scan_date=\$(date +%Y-%m-%d)" \\
-                                    -F "minimum_severity=Info" \\
-                                    -F "active=true" \\
-                                    -F "verified=false" \\
-                                    -F "scan_type=Dependency Check Scan" \\
-                                    -F "product_name=webapp-project" \\
-                                    -F "file=@owasp-reports/dependency-check-report.json" \\
-                                    -F "engagement_name=Jenkins-Build-${BUILD_NUMBER}"
-                                echo "✅ OWASP Dependency Check report uploaded"
-                            else
-                                echo "⚠️  No OWASP Dependency Check report to upload"
-                            fi
-                        """
-                        
-                        echo "🎉 All reports uploaded to DefectDojo!"
-                        echo "📊 View results at: ${DEFECTDOJO_URL}/product/webapp-project"
-                        
+                        echo "✅ Uploaded ${filePath}"
                     } else {
-                        echo "❌ Failed to get DefectDojo API token. Skipping upload."
+                        echo "⚠️ File ${filePath} does not exist or is empty. Skipping."
                     }
                 }
+
+                echo "🎉 All report upload attempts finished!"
+                echo "📊 View results at: ${DEFECTDOJO_URL}/product/${productName}"
             }
         }
+    }
+}
+
         
         stage('SonarQube Analysis') {
             steps {
