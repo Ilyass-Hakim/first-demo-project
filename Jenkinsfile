@@ -136,6 +136,48 @@ stage('Publish OWASP Report') {
 
    
         // NEW STAGE: Upload Reports to DefectDojo
+stage('Validate Security Reports') {
+    steps {
+        script {
+            echo "🔍 Validating security report contents..."
+            
+            // Check each report file
+            def reports = [
+                'gitleaks-report.json',
+                'semgrep-report.json', 
+                'owasp-reports/dependency-check-report.json'
+            ]
+            
+            for (reportFile in reports) {
+                def exists = sh(script: "[ -f '${reportFile}' ] && echo 'yes' || echo 'no'", returnStdout: true).trim()
+                if (exists == 'yes') {
+                    echo "📄 ${reportFile}:"
+                    sh "echo 'Size: ' && wc -c '${reportFile}'"
+                    sh "echo 'Content preview:' && head -n 5 '${reportFile}' || echo 'Unable to preview'"
+                    
+                    // Check if JSON is valid
+                    def isValidJson = sh(script: "jq empty '${reportFile}' 2>/dev/null && echo 'valid' || echo 'invalid'", returnStdout: true).trim()
+                    echo "JSON validity: ${isValidJson}"
+                    
+                    // Check if report has findings
+                    if (reportFile.contains('gitleaks')) {
+                        def findings = sh(script: "jq length '${reportFile}' 2>/dev/null || echo '0'", returnStdout: true).trim()
+                        echo "Gitleaks findings count: ${findings}"
+                    } else if (reportFile.contains('semgrep')) {
+                        def findings = sh(script: "jq '.results | length' '${reportFile}' 2>/dev/null || echo '0'", returnStdout: true).trim()
+                        echo "Semgrep findings count: ${findings}"
+                    } else if (reportFile.contains('dependency-check')) {
+                        def findings = sh(script: "jq '.dependencies | length' '${reportFile}' 2>/dev/null || echo '0'", returnStdout: true).trim()
+                        echo "OWASP dependencies scanned: ${findings}"
+                    }
+                } else {
+                    echo "❌ ${reportFile} not found"
+                }
+            }
+        }
+    }
+}
+
 stage('Upload Reports to DefectDojo') {
     agent { label 'maven_build_server' }
     steps {
@@ -233,7 +275,6 @@ stage('Upload Reports to DefectDojo') {
         }
     }
 }
-
 
         
         stage('SonarQube Analysis') {
