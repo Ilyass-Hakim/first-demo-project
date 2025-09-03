@@ -105,31 +105,36 @@ pipeline {
         }
 
         // NEW STAGE: OWASP Dependency Check
-stage('OWASP Dependency Check') {
-    agent { label 'maven_build_server' }
+stage('OWASP Dependency-Check') {
+    agent { label 'maven' } // the node with Maven and Docker
     steps {
-        echo 'Running OWASP Dependency Check...'
-        sh '''
-            mkdir -p owasp-reports
-            
-docker run --rm \
-  -v "$WORKSPACE":/src:ro \
-  -v /opt/owasp-data:/usr/share/dependency-check/data \
-  -v "$WORKSPACE/owasp-reports":/reports \
-  owasp/dependency-check:latest \
-  --scan /src \
-  --format JSON \
-  --out /reports \
-  --project "webapp-project-${BUILD_NUMBER}" \
-  --noupdate
+        script {
+            // Ensure reports folder exists
+            sh 'mkdir -p $WORKSPACE/owasp-reports'
+            sh 'chmod -R 777 $WORKSPACE/owasp-reports'
 
-                
-            ls -la owasp-reports/
-        '''
-        archiveArtifacts artifacts: 'owasp-reports/*', allowEmptyArchive: true
+            // Build Maven project and copy dependencies
+            sh 'mvn clean package dependency:copy-dependencies -DskipTests'
+
+            // Run OWASP Dependency-Check using Docker
+            sh """
+            docker run --rm \\
+                -v "$WORKSPACE":/src \\
+                -v /opt/owasp-data:/usr/share/dependency-check/data \\
+                -v "$WORKSPACE/owasp-reports":/reports \\
+                owasp/dependency-check:latest \\
+                --scan /src/target \\
+                --format JSON \\
+                --out /reports \\
+                --project "webapp-project-\$BUILD_NUMBER"
+            """
+
+            // Optional: show report location
+            sh 'ls -la $WORKSPACE/owasp-reports'
+        }
     }
 }
-        
+   
         // NEW STAGE: Upload Reports to DefectDojo
         stage('Upload Reports to DefectDojo') {
             agent { label 'maven_build_server' }
