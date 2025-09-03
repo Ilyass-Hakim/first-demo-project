@@ -141,60 +141,89 @@ stage('Upload Reports to DefectDojo') {
     steps {
         withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'API_TOKEN')]) {
             script {
+                echo "Using DefectDojo token from Jenkins credentials."
+
                 def productName = 'webapp-project'
                 def engagementName = 'Jenkins-Build'
                 def engagementDesc = "Automated engagement for ${productName}"
 
-                def productId = sh(script: """curl -s -H "Authorization: Token ${API_TOKEN}" \
-                    "${DEFECTDOJO_URL}/api/v2/products/?name=${productName}" | jq -r '.results[0].id'""",
-                    returnStdout: true).trim()
-                if (!productId) error "❌ Product '${productName}' does not exist."
+                // Get product ID
+                def productId = sh(script: """
+                    curl -s -H "Authorization: Token ${API_TOKEN}" \
+                    "${DEFECTDOJO_URL}/api/v2/products/?name=${productName}" | jq -r '.results[0].id'
+                """, returnStdout: true).trim()
 
-                def engagementId = sh(script: """curl -s -H "Authorization: Token ${API_TOKEN}" \
+                if (!productId || productId == "null") {
+                    error "❌ Product '${productName}' does not exist in DefectDojo. Create it first."
+                }
+                echo "✅ Found product ID: ${productId}"
+
+                // Get engagement ID
+                def engagementId = sh(script: """
+                    curl -s -H "Authorization: Token ${API_TOKEN}" \
                     "${DEFECTDOJO_URL}/api/v2/engagements/?name=${engagementName}&product=${productId}" \
-                    | jq -r '.results[0].id'""", returnStdout: true).trim()
+                    | jq -r '.results[0].id'
+                """, returnStdout: true).trim()
 
+                // Create engagement if not exists
                 if (!engagementId || engagementId == "null") {
-                    engagementId = sh(script: """curl -s -X POST "${DEFECTDOJO_URL}/api/v2/engagements/" \
-                        -H "Authorization: Token ${API_TOKEN}" \
-                        -H "Content-Type: application/json" \
-                        -d '{
-                            "name": "${engagementName}",
-                            "description": "${engagementDesc}",
-                            "product": ${productId},
-                            "status": "In Progress",
-                            "target_start": "$(date +%Y-%m-%d)",
-                            "target_end": "$(date +%Y-%m-%d)"
-                        }' | jq -r '.id'""", returnStdout: true).trim()
+                    echo "Engagement not found. Creating new engagement..."
+                    engagementId = sh(script: """
+                        curl -s -X POST "${DEFECTDOJO_URL}/api/v2/engagements/" \
+                          -H "Authorization: Token ${API_TOKEN}" \
+                          -H "Content-Type: application/json" \
+                          -d '{
+                                "name": "${engagementName}",
+                                "description": "${engagementDesc}",
+                                "product": ${productId},
+                                "status": "In Progress",
+                                "target_start": "$(date +%Y-%m-%d)",
+                                "target_end": "$(date +%Y-%m-%d)"
+                              }' | jq -r '.id'
+                    """, returnStdout: true).trim()
+                    echo "✅ Created engagement ID: ${engagementId}"
+                } else {
+                    echo "✅ Found existing engagement ID: ${engagementId}"
                 }
 
+                // Reports to upload
                 def reports = [
-                    [file: "$WORKSPACE/gitleaks-report.json", scanType: 'Gitleaks Scan'],
-                    [file: "$WORKSPACE/owasp-reports/dependency-check-report.json", scanType: 'Dependency Check Scan'],
-                    [file: "$WORKSPACE/semgrep-report.json", scanType: 'Semgrep JSON Report']
+                    [file: 'gitleaks-report.json', scanType: 'Gitleaks Scan'],
+                    [file: 'owasp-reports/dependency-check-report.json', scanType: 'Dependency Check Scan'],
+                    [file: 'semgrep-report.json', scanType: 'Semgrep JSON Report']
                 ]
 
+                // Upload each report
                 for (r in reports) {
                     def filePath = r.file
                     def scanType = r.scanType
-                    def fileExists = sh(script: "[ -f '${filePath}' ] && [ -s '${filePath}' ] && echo yes || echo no", returnStdout: true).trim()
+
+                    def fileExists = sh(script: "[ -f '${filePath}' ] && [ -s '${filePath}' ] && echo 'yes' || echo 'no'", returnStdout: true).trim()
                     if (fileExists == 'yes') {
-                        sh """curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
-                            -H "Authorization: Token ${API_TOKEN}" \
-                            -F "engagement=${engagementId}" \
-                            -F "scan_date=$(date +%Y-%m-%d)" \
-                            -F "minimum_severity=Info" \
-                            -F "active=true" \
-                            -F "verified=false" \
-                            -F "scan_type=${scanType}" \
-                            -F "file=@${filePath}" """
+                        echo "Uploading ${filePath} as ${scanType}..."
+                        sh """
+                            curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+                              -H "Authorization: Token ${API_TOKEN}" \
+                              -F "engagement=${engagementId}" \
+                              -F "scan_date=$(date +%Y-%m-%d)" \
+                              -F "minimum_severity=Info" \
+                              -F "active=true" \
+                              -F "verified=false" \
+                              -F "scan_type=${scanType}" \
+                              -F "file=@${filePath}"
+                        """
+                        echo "✅ Uploaded ${filePath}"
+                    } else {
+                        echo "⚠️ File ${filePath} does not exist or is empty. Skipping."
                     }
                 }
-                echo "✅ All reports uploaded!"
+
+                echo "🎉 All report uploads completed! Check DefectDojo engagement ID: ${engagementId}"
             }
         }
     }
 }
+
 
 
 
