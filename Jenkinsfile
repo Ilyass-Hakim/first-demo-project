@@ -182,47 +182,57 @@ stage('Upload Reports to DefectDojo') {
                     echo "✅ Found existing engagement ID: ${engagementId}"
                 }
 
-                // Reports to upload
+                // Reports to upload with CORRECT scanner types
                 def reports = [
-                    [file: 'gitleaks-report.json', scanType: 'Gitleaks Scan'],
-                    [file: 'owasp-reports/dependency-check-report.json', scanType: 'Dependency Check Scan'],
-                    [file: 'semgrep-report.json', scanType: 'Semgrep JSON Report']
+                    [file: 'gitleaks-report.json', scanType: 'Gitleaks Scan', description: 'Secret detection scan'],
+                    [file: 'owasp-reports/dependency-check-report.json', scanType: 'Dependency Check Scan', description: 'OWASP dependency vulnerabilities'],
+                    [file: 'semgrep-report.json', scanType: 'Semgrep JSON Report', description: 'Static code analysis']
                 ]
 
-                // Upload each report
+                // Upload each report with better error handling
                 for (r in reports) {
                     def filePath = r.file
                     def scanType = r.scanType
+                    def description = r.description
 
                     def fileExists = sh(script: "[ -f '${filePath}' ] && [ -s '${filePath}' ] && echo 'yes' || echo 'no'", returnStdout: true).trim()
                     if (fileExists == 'yes') {
-                        echo "Uploading ${filePath} as ${scanType}..."
+                        echo "📤 Uploading ${filePath} as ${scanType}..."
                         
-                        // Escaping $ for shell variables using single quotes in Groovy
-                        sh('''curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
-                             -H "Authorization: Token ${API_TOKEN}" \
-                             -F "engagement=''' + engagementId + '''" \
-                             -F "scan_date=$(date +%Y-%m-%d)" \
-                             -F "minimum_severity=Info" \
-                             -F "active=true" \
-                             -F "verified=false" \
-                             -F "scan_type=''' + scanType + '''" \
-                             -F "file=@''' + filePath + '''"
-                        ''')
-                        echo "✅ Uploaded ${filePath}"
+                        // Check file content first
+                        sh "echo 'File size:' && wc -c '${filePath}'"
+                        sh "echo 'First 200 chars:' && head -c 200 '${filePath}'"
+                        
+                        def uploadResponse = sh(script: '''
+                            curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+                                 -H "Authorization: Token ${API_TOKEN}" \
+                                 -F "engagement=''' + engagementId + '''" \
+                                 -F "scan_date=$(date +%Y-%m-%d)" \
+                                 -F "minimum_severity=Info" \
+                                 -F "active=true" \
+                                 -F "verified=false" \
+                                 -F "scan_type=''' + scanType + '''" \
+                                 -F "file=@''' + filePath + '''" \
+                                 -w "HTTP_CODE:%{http_code}"
+                        ''', returnStdout: true).trim()
+                        
+                        echo "Upload response: ${uploadResponse}"
+                        
+                        if (uploadResponse.contains("HTTP_CODE:201") || uploadResponse.contains("HTTP_CODE:200")) {
+                            echo "✅ Successfully uploaded ${filePath}"
+                        } else {
+                            echo "❌ Failed to upload ${filePath}: ${uploadResponse}"
+                        }
                     } else {
                         echo "⚠️ File ${filePath} does not exist or is empty. Skipping."
                     }
                 }
 
-                echo "🎉 All report uploads completed! Check DefectDojo engagement ID: ${engagementId}"
+                echo "🎉 DefectDojo upload process completed! Check engagement: ${DEFECTDOJO_URL}/engagement/${engagementId}"
             }
         }
     }
 }
-
-
-
 
 
         
