@@ -150,8 +150,8 @@ stage('Upload Reports to DefectDojo') {
                 def engagementDesc = "Automated engagement for ${productName}"
 
                 // Get product ID
-                def productId = sh(script: """curl -s -H "Authorization: Token ${API_TOKEN}" \
-                    "${DEFECTDOJO_URL}/api/v2/products/?name=${productName}" | jq -r '.results[0].id'""",
+                def productId = sh(script: 'curl -s -H "Authorization: Token ' + API_TOKEN + '" ' +
+                    '"' + DEFECTDOJO_URL + '/api/v2/products/?name=' + productName + '" | jq -r \'.results[0].id\'',
                     returnStdout: true).trim()
 
                 if (productId == "null" || productId == "") {
@@ -160,24 +160,25 @@ stage('Upload Reports to DefectDojo') {
                 echo "✅ Found product ID: ${productId}"
 
                 // Get engagement ID
-                def engagementId = sh(script: """curl -s -H "Authorization: Token ${API_TOKEN}" \
-                    "${DEFECTDOJO_URL}/api/v2/engagements/?name=${engagementName}&product=${productId}" | jq -r '.results[0].id'""",
+                def engagementId = sh(script: 'curl -s -H "Authorization: Token ' + API_TOKEN + '" ' +
+                    '"' + DEFECTDOJO_URL + '/api/v2/engagements/?name=' + engagementName + '&product=' + productId + '" | jq -r \'.results[0].id\'',
                     returnStdout: true).trim()
 
                 // Create engagement if not exists
                 if (engagementId == "null" || engagementId == "") {
                     echo "Engagement not found. Creating new engagement..."
-                    engagementId = sh(script: """curl -s -X POST "${DEFECTDOJO_URL}/api/v2/engagements/" \
-                        -H "Authorization: Token ${API_TOKEN}" \
-                        -H "Content-Type: application/json" \
-                        -d '{
-                            "name": "${engagementName}",
-                            "description": "${engagementDesc}",
-                            "product": '${productId}',
-                            "status": "In Progress",
-                            "target_start": "'$(date +%Y-%m-%d)'",
-                            "target_end": "'$(date +%Y-%m-%d)'"
-                        }' | jq -r '.id'""", returnStdout: true).trim()
+                    engagementId = sh(script: 'curl -s -X POST "' + DEFECTDOJO_URL + '/api/v2/engagements/" ' +
+                        '-H "Authorization: Token ' + API_TOKEN + '" ' +
+                        '-H "Content-Type: application/json" ' +
+                        '-d \'{' +
+                        '"name": "' + engagementName + '",' +
+                        '"description": "' + engagementDesc + '",' +
+                        '"product": ' + productId + ',' +
+                        '"status": "In Progress",' +
+                        '"target_start": "' + sh(script: 'date +%Y-%m-%d', returnStdout: true).trim() + '",' +
+                        '"target_end": "' + sh(script: 'date +%Y-%m-%d', returnStdout: true).trim() + '"' +
+                        '}\' | jq -r \'.id\'',
+                        returnStdout: true).trim()
                     echo "✅ Created engagement ID: ${engagementId}"
                 } else {
                     echo "✅ Found existing engagement ID: ${engagementId}"
@@ -195,20 +196,19 @@ stage('Upload Reports to DefectDojo') {
                     def filePath = r.file
                     def scanType = r.scanType
 
-                    def fileExists = sh(script: "[ -f '${filePath}' ] && [ -s '${filePath}' ] && echo 'yes' || echo 'no'", returnStdout: true).trim()
+                    def fileExists = sh(script: '[ -f "' + filePath + '" ] && [ -s "' + filePath + '" ] && echo "yes" || echo "no"', returnStdout: true).trim()
                     if (fileExists == 'yes') {
                         echo "Uploading ${filePath} as ${scanType}..."
-                        sh """
-                            curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
-                                -H "Authorization: Token ${API_TOKEN}" \
-                                -F "engagement=${engagementId}" \
-                                -F "scan_date=$(date +%Y-%m-%d)" \
-                                -F "minimum_severity=Info" \
-                                -F "active=true" \
-                                -F "verified=false" \
-                                -F "scan_type=${scanType}" \
-                                -F "file=@${filePath}"
-                        """
+                        sh('curl -s -X POST "' + DEFECTDOJO_URL + '/api/v2/import-scan/" ' +
+                            '-H "Authorization: Token ' + API_TOKEN + '" ' +
+                            '-F "engagement=' + engagementId + '" ' +
+                            '-F "scan_date=' + sh(script: 'date +%Y-%m-%d', returnStdout: true).trim() + '" ' +
+                            '-F "minimum_severity=Info" ' +
+                            '-F "active=true" ' +
+                            '-F "verified=false" ' +
+                            '-F "scan_type=' + scanType + '" ' +
+                            '-F "file=@' + filePath + '"'
+                        )
                         echo "✅ Uploaded ${filePath}"
                     } else {
                         echo "⚠️ File ${filePath} does not exist or is empty. Skipping."
@@ -220,6 +220,7 @@ stage('Upload Reports to DefectDojo') {
         }
     }
 }
+
 
 
         
