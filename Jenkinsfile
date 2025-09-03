@@ -112,16 +112,17 @@ stage('OWASP Dependency Check') {
         sh '''
             mkdir -p owasp-reports
             
-            docker run --rm \\
-                -v "$WORKSPACE/target":/src:ro \\
-                -v "$WORKSPACE/owasp-reports":/reports \\
-                -v "/opt/owasp-data":/usr/share/dependency-check/data \\
-                owasp/dependency-check:latest \\
-                --scan /src \\
-                --format JSON \\
-                --out /reports \\
-                --project "webapp-project-${BUILD_NUMBER}" \\
-                --noupdate
+docker run --rm \
+  -v "$WORKSPACE":/src:ro \
+  -v /opt/owasp-data:/usr/share/dependency-check/data \
+  -v "$WORKSPACE/owasp-reports":/reports \
+  owasp/dependency-check:latest \
+  --scan /src \
+  --format JSON \
+  --out /reports \
+  --project "webapp-project-${BUILD_NUMBER}" \
+  --noupdate
+
                 
             ls -la owasp-reports/
         '''
