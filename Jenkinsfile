@@ -109,9 +109,7 @@ stage('OWASP Dependency-Check') {
     agent { label 'maven_build_server' }
     steps {
         script {
-            // Ensure reports folder exists and is writable
-            sh 'mkdir -p $WORKSPACE/owasp-reports'
-            sh 'chmod -R 777 $WORKSPACE/owasp-reports'
+
 
             // Run OWASP Dependency-Check Docker scan
             sh """
