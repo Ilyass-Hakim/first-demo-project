@@ -129,6 +129,12 @@ stage('OWASP Dependency-Check') {
         }
     }
 }
+        stage('Publish OWASP Report') {
+    steps {
+        archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.json', allowEmptyArchive: false
+    }
+}
+
 
    
         // NEW STAGE: Upload Reports to DefectDojo
