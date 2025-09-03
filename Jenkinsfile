@@ -168,18 +168,21 @@ stage('Upload Reports to DefectDojo') {
                 // Create engagement if not exists
                 if (!engagementId || engagementId == "null") {
                     echo "Engagement not found. Creating new engagement..."
+                    def jsonPayload = [
+                        name: engagementName,
+                        description: engagementDesc,
+                        product: productId.toInteger(),
+                        status: "In Progress",
+                        target_start: sh(script: 'date +%Y-%m-%d', returnStdout: true).trim(),
+                        target_end: sh(script: 'date +%Y-%m-%d', returnStdout: true).trim()
+                    ]
+                    def jsonStr = groovy.json.JsonOutput.toJson(jsonPayload)
+
                     engagementId = sh(script: """
                         curl -s -X POST "${DEFECTDOJO_URL}/api/v2/engagements/" \
                           -H "Authorization: Token ${API_TOKEN}" \
                           -H "Content-Type: application/json" \
-                          -d '{
-                                "name": "${engagementName}",
-                                "description": "${engagementDesc}",
-                                "product": ${productId},
-                                "status": "In Progress",
-                                "target_start": "$(date +%Y-%m-%d)",
-                                "target_end": "$(date +%Y-%m-%d)"
-                              }' | jq -r '.id'
+                          -d '${jsonStr}' | jq -r '.id'
                     """, returnStdout: true).trim()
                     echo "✅ Created engagement ID: ${engagementId}"
                 } else {
