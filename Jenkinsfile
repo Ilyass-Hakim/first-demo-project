@@ -253,19 +253,19 @@ pipeline {
         }
 
         // NEW STAGE: Configure Nginx Reverse Proxy
-        stage('Configure Nginx Reverse Proxy') {
-            steps {
-                echo 'Setting up Nginx reverse proxy to Kubernetes service...'
-                withCredentials([sshUserPrivateKey(credentialsId: "${PROXY_SSH_KEY}", keyFileVariable: 'PROXY_KEY')]) {
-                    script {
-                        // Prepare SSH key
-                        sh '''
-                            cp ${PROXY_KEY} /tmp/proxy_key
-                            chmod 600 /tmp/proxy_key
-                        '''
+stage('Configure Nginx Reverse Proxy') {
+    steps {
+        echo 'Setting up Nginx reverse proxy to Kubernetes service...'
+        withCredentials([sshUserPrivateKey(credentialsId: "${PROXY_SSH_KEY}", keyFileVariable: 'PROXY_KEY')]) {
+            script {
+                // Prepare SSH key
+                sh '''
+                    cp ${PROXY_KEY} /tmp/proxy_key
+                    chmod 600 /tmp/proxy_key
+                '''
 
-                        // Create Nginx configuration template
-                        writeFile file: 'nginx-proxy.conf', text: """
+                // Create Nginx configuration template
+                writeFile file: 'nginx-proxy.conf', text: """
 server {
     listen 80;
     server_name ${PROXY_DOMAIN};
@@ -279,14 +279,14 @@ server {
         proxy_pass http://${K8S_NODE_IP}:${K8S_NODE_PORT};
         
         # Headers for proper proxy behavior
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
         
         # WebSocket support (if your app uses WebSockets)
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade \\\$http_upgrade;
         proxy_set_header Connection "upgrade";
         
         # Timeout configurations
@@ -306,83 +306,58 @@ server {
         return 200 "Nginx proxy is healthy\\n";
         add_header Content-Type text/plain;
     }
-    
-    # Static files caching (optional optimization)
-    location ~* \\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)\$ {
-        proxy_pass http://${K8S_NODE_IP}:${K8S_NODE_PORT};
-        proxy_set_header Host \$host;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
 }
 """
 
-                        // Copy configuration to proxy server and restart Nginx
-                        sh """
-                            # Add proxy server to known hosts
-                            ssh-keyscan -H ${PROXY_SERVER} >> ~/.ssh/known_hosts 2>/dev/null || true
-                            
-                            # Copy Nginx config to server
-                            scp -i /tmp/proxy_key -o StrictHostKeyChecking=no nginx-proxy.conf ${PROXY_USER}@${PROXY_SERVER}:/tmp/webapp-proxy.conf
-                            
-                            # Install and configure Nginx on proxy server
-                            ssh -i /tmp/proxy_key -o StrictHostKeyChecking=no ${PROXY_USER}@${PROXY_SERVER} '
-                                # Install Nginx if not already installed
-                                if ! command -v nginx &> /dev/null; then
-                                    echo "Installing Nginx..."
-                                    sudo apt update && sudo apt install -y nginx
-                                fi
-                                
-                                # Backup existing config if it exists
-                                if [ -f /etc/nginx/sites-available/webapp-proxy ]; then
-                                    sudo cp /etc/nginx/sites-available/webapp-proxy /etc/nginx/sites-available/webapp-proxy.backup.$(date +%Y%m%d_%H%M%S)
-                                fi
-                                
-                                # Copy new configuration
-                                sudo cp /tmp/webapp-proxy.conf /etc/nginx/sites-available/webapp-proxy
-                                
-                                # Enable site (create symlink)
-                                sudo ln -sf /etc/nginx/sites-available/webapp-proxy /etc/nginx/sites-enabled/webapp-proxy
-                                
-                                # Remove default site if it exists and conflicts
-                                if [ -f /etc/nginx/sites-enabled/default ]; then
-                                    sudo rm /etc/nginx/sites-enabled/default
-                                fi
-                                
-                                # Test Nginx configuration
-                                sudo nginx -t
-                                
-                                # Reload Nginx
-                                sudo systemctl reload nginx
-                                sudo systemctl enable nginx
-                                
-                                # Check Nginx status
-                                sudo systemctl status nginx --no-pager
-                                
-                                echo "Nginx proxy configuration completed successfully!"
-                            '
-                        """
+                // Copy configuration and setup Nginx
+                sh """
+                    # Add proxy server to known hosts
+                    ssh-keyscan -H ${PROXY_SERVER} >> ~/.ssh/known_hosts 2>/dev/null || true
+                    
+                    # Copy Nginx config to server
+                    scp -i /tmp/proxy_key -o StrictHostKeyChecking=no nginx-proxy.conf ${PROXY_USER}@${PROXY_SERVER}:/tmp/webapp-proxy.conf
+                """
 
-                        // Wait a moment and test the proxy
-                        sh """
-                            echo "Waiting for Nginx to fully restart..."
-                            sleep 5
-                            
-                            # Test the proxy endpoint
-                            ssh -i /tmp/proxy_key -o StrictHostKeyChecking=no ${PROXY_USER}@${PROXY_SERVER} '
-                                echo "Testing Nginx proxy health..."
-                                curl -f http://localhost/nginx-health || echo "Health check failed"
-                                
-                                echo "Testing proxy to Kubernetes..."
-                                curl -I http://localhost/ --connect-timeout 10 || echo "Proxy test failed"
-                            '
-                        """
-                    }
-                }
+                // Configure Nginx using heredoc
+                sh """
+                    ssh -i /tmp/proxy_key -o StrictHostKeyChecking=no ${PROXY_USER}@${PROXY_SERVER} << 'EOF'
+                        # Copy new configuration
+                        sudo cp /tmp/webapp-proxy.conf /etc/nginx/sites-available/webapp-proxy
+                        
+                        # Enable site (create symlink)
+                        sudo ln -sf /etc/nginx/sites-available/webapp-proxy /etc/nginx/sites-enabled/webapp-proxy
+                        
+                        # Remove default site if it exists
+                        if [ -f /etc/nginx/sites-enabled/default ]; then
+                            sudo rm /etc/nginx/sites-enabled/default
+                        fi
+                        
+                        # Test Nginx configuration
+                        sudo nginx -t
+                        
+                        # Reload Nginx
+                        sudo systemctl reload nginx
+                        sudo systemctl enable nginx
+                        
+                        echo "Nginx proxy configuration completed successfully!"
+EOF
+                """
+
+                // Test the proxy
+                sh """
+                    echo "Waiting for Nginx to restart..."
+                    sleep 5
+                    
+                    ssh -i /tmp/proxy_key -o StrictHostKeyChecking=no ${PROXY_USER}@${PROXY_SERVER} 'curl -f http://localhost/nginx-health || echo "Health check failed"'
+                """
             }
         }
     }
-    
+}
+
+
+
+        
     post {
         always {
             echo 'Cleaning up...'
