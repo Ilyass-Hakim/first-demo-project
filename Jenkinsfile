@@ -369,7 +369,7 @@ stage('Upload Reports to DefectDojo') {
         }
          stage('Deploy WAR to Tomcat') {
     steps {
-        sshagent(['tomcat-vm-ssh-key']) {
+        sshagent(['tomcat-server-ssh-key']) {
             script {
                 // Copy WAR to Tomcat VM
                 sh """
