@@ -255,10 +255,11 @@ pipeline {
         stage('Configure Nginx Reverse Proxy') {
             steps {
                 echo 'Setting up Nginx reverse proxy to Kubernetes service...'
-                withCredentials([sshUserPrivateKey(credentialsId: 'tomcat-server-ssh-key', keyFileVariable: 'PROXY_KEY')]) {
+                sshagent(['tomcat-server-ssh-key']) {
                     sh '''
-                        cp ${PROXY_KEY} /tmp/proxy_key
-                        chmod 600 /tmp/proxy_key
+                        # Add server to known hosts
+                        mkdir -p ~/.ssh
+                        ssh-keyscan -H 192.168.1.27 >> ~/.ssh/known_hosts 2>/dev/null || true
                         
                         # Create simple Nginx config
                         cat > nginx-proxy.conf << 'EOL'
@@ -281,10 +282,10 @@ server {
 EOL
                         
                         # Copy config to server
-                        scp -i /tmp/proxy_key -o StrictHostKeyChecking=no nginx-proxy.conf tomcat@192.168.1.27:/tmp/
+                        scp -o StrictHostKeyChecking=no nginx-proxy.conf tomcat@192.168.1.27:/tmp/
                         
                         # Configure Nginx
-                        ssh -i /tmp/proxy_key -o StrictHostKeyChecking=no tomcat@192.168.1.27 "
+                        ssh -o StrictHostKeyChecking=no tomcat@192.168.1.27 "
                             sudo cp /tmp/nginx-proxy.conf /etc/nginx/sites-available/webapp-proxy
                             sudo ln -sf /etc/nginx/sites-available/webapp-proxy /etc/nginx/sites-enabled/webapp-proxy
                             sudo rm -f /etc/nginx/sites-enabled/default
@@ -293,7 +294,7 @@ EOL
                         "
                         
                         # Cleanup
-                        rm -f /tmp/proxy_key nginx-proxy.conf
+                        rm -f nginx-proxy.conf
                     '''
                 }
             }
