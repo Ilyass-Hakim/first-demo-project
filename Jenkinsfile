@@ -103,27 +103,28 @@ stage('Archive Semgrep Report') {
 
 
         // NEW STAGE: OWASP Dependency Check
-stage('OWASP Dependency-Check') {
-    agent { label 'maven_build_server' }
+stage('OWASP Dependency Check') {
     steps {
-        script {
-            sh 'mkdir -p $WORKSPACE/owasp-reports && chmod -R 777 $WORKSPACE/owasp-reports'
-
-            sh """
+        sh '''
+            mkdir -p $WORKSPACE/owasp-reports
             docker run --rm \
-                -v "\$(pwd)":/src \
-                -v /opt/owasp-data:/usr/share/dependency-check/data \
-                -v "\$(pwd)/owasp-reports":/reports \
-                owasp/dependency-check:latest \
-                --scan /src \
-                --format ALL \
-                --disableBundleAudit --disableNodeAudit \
-                --out /reports \
-                --project "webapp-project-\$BUILD_NUMBER"
-            """
+              -v $WORKSPACE:/src \
+              -v /opt/owasp-data:/usr/share/dependency-check/data \
+              -v $WORKSPACE/owasp-reports:/reports \
+              owasp/dependency-check:latest \
+              --scan /src \
+              --format JSON \
+              --out /reports \
+              --project "jenkins-build"
+        '''
+    }
+    post {
+        success {
+            archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.json', fingerprint: true
         }
     }
 }
+
 
 
 stage('Publish OWASP Report') {
