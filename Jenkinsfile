@@ -61,25 +61,22 @@ pipeline {
 }
 
         
-        stage('Build') {
-            steps {
-                echo 'Building with Maven...'
-                sh 'mvn clean compile'
-            }
-        }
-        
-        stage('Test') {
-            steps {
-                echo 'Running tests...'
-                sh 'mvn test'
-            }
-        }
-        stage('Archive WAR') {
+stage('Build & Test & Archive WAR') {
+    agent { label 'maven_build_server' }
     steps {
+        echo 'Building with Maven...'
+        sh 'mvn clean compile'
+
+        echo 'Running tests...'
+        sh 'mvn test'
+
+        echo 'Packaging WAR...'
+        sh 'mvn package'
+
+        echo 'Archiving WAR...'
         archiveArtifacts artifacts: 'target/webapp-project-1.0.0.war', allowEmptyArchive: false
     }
 }
-
             
   stage('Run Semgrep remotely') {
     steps {
