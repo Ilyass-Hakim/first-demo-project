@@ -252,17 +252,16 @@ pipeline {
             }
         }
 
-        // NEW STAGE: Configure Nginx Reverse Proxy
-stage('Configure Nginx Reverse Proxy') {
-    steps {
-        echo 'Setting up Nginx reverse proxy to Kubernetes service...'
-        withCredentials([sshUserPrivateKey(credentialsId: 'tomcat-server-ssh-key', keyFileVariable: 'PROXY_KEY')]) {
-            sh '''
-                cp ${PROXY_KEY} /tmp/proxy_key
-                chmod 600 /tmp/proxy_key
-                
-                # Create simple Nginx config
-                cat > nginx-proxy.conf << 'EOL'
+        stage('Configure Nginx Reverse Proxy') {
+            steps {
+                echo 'Setting up Nginx reverse proxy to Kubernetes service...'
+                withCredentials([sshUserPrivateKey(credentialsId: 'tomcat-server-ssh-key', keyFileVariable: 'PROXY_KEY')]) {
+                    sh '''
+                        cp ${PROXY_KEY} /tmp/proxy_key
+                        chmod 600 /tmp/proxy_key
+                        
+                        # Create simple Nginx config
+                        cat > nginx-proxy.conf << 'EOL'
 server {
     listen 80;
     server_name 192.168.1.27;
@@ -280,28 +279,26 @@ server {
     }
 }
 EOL
-                
-                # Copy config to server
-                scp -i /tmp/proxy_key -o StrictHostKeyChecking=no nginx-proxy.conf tomcat@192.168.1.27:/tmp/
-                
-                # Configure Nginx
-                ssh -i /tmp/proxy_key -o StrictHostKeyChecking=no tomcat@192.168.1.27 "
-                    sudo cp /tmp/nginx-proxy.conf /etc/nginx/sites-available/webapp-proxy
-                    sudo ln -sf /etc/nginx/sites-available/webapp-proxy /etc/nginx/sites-enabled/webapp-proxy
-                    sudo rm -f /etc/nginx/sites-enabled/default
-                    sudo nginx -t && sudo systemctl reload nginx
-                    echo 'Nginx proxy configured successfully'
-                "
-                
-                # Cleanup
-                rm -f /tmp/proxy_key nginx-proxy.conf
-            '''
+                        
+                        # Copy config to server
+                        scp -i /tmp/proxy_key -o StrictHostKeyChecking=no nginx-proxy.conf tomcat@192.168.1.27:/tmp/
+                        
+                        # Configure Nginx
+                        ssh -i /tmp/proxy_key -o StrictHostKeyChecking=no tomcat@192.168.1.27 "
+                            sudo cp /tmp/nginx-proxy.conf /etc/nginx/sites-available/webapp-proxy
+                            sudo ln -sf /etc/nginx/sites-available/webapp-proxy /etc/nginx/sites-enabled/webapp-proxy
+                            sudo rm -f /etc/nginx/sites-enabled/default
+                            sudo nginx -t && sudo systemctl reload nginx
+                            echo 'Nginx proxy configured successfully'
+                        "
+                        
+                        # Cleanup
+                        rm -f /tmp/proxy_key nginx-proxy.conf
+                    '''
+                }
+            }
         }
     }
-}
-
-
-
         
     post {
         always {
@@ -325,5 +322,4 @@ EOL
             echo 'Pipeline failed! Check the logs for details.'
         }
     }
-}
 }
