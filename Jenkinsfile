@@ -111,6 +111,7 @@ stage('OWASP Dependency Check') {
               -v $WORKSPACE:/src \
               -v /opt/owasp-data:/usr/share/dependency-check/data \
               -v $WORKSPACE/owasp-reports:/reports \
+              --user $(id -u):$(id -g) \
               owasp/dependency-check:latest \
               --scan /src \
               --format JSON \
