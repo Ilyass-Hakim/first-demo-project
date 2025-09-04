@@ -70,7 +70,7 @@ stage('Build & Package WAR') {
 }
 
 stage('Deploy WAR to Tomcat') {
-    agent { label 'any' } // or master
+    agent { label 'maven_build_server' } 
     steps {
         unstash 'war-file'
         sh '''
