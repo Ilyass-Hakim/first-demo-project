@@ -107,24 +107,24 @@ stage('OWASP Dependency-Check') {
     agent { label 'maven_build_server' }
     steps {
         script {
-            sh 'mkdir -p $WORKSPACE/owasp-reports'
+            sh 'mkdir -p $WORKSPACE/owasp-reports && chmod -R 777 $WORKSPACE/owasp-reports'
 
             sh """
-            docker run --rm \\
-                -v "$WORKSPACE":/src \\
-                -v /opt/owasp-data:/usr/share/dependency-check/data \\
-                -v "$WORKSPACE/owasp-reports":/reports \\
-                owasp/dependency-check:latest \\
-                --scan /src \\
-                --format JSON \\
-                --out /reports \\
+            docker run --rm \
+                -v "\$(pwd)":/src \
+                -v /opt/owasp-data:/usr/share/dependency-check/data \
+                -v "\$(pwd)/owasp-reports":/reports \
+                owasp/dependency-check:latest \
+                --scan /src \
+                --format ALL \
+                --disableBundleAudit --disableNodeAudit \
+                --out /reports \
                 --project "webapp-project-\$BUILD_NUMBER"
             """
-
-            sh 'ls -la $WORKSPACE/owasp-reports'
         }
     }
 }
+
 
 stage('Publish OWASP Report') {
     steps {
