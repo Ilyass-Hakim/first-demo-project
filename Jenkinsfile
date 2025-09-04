@@ -386,23 +386,7 @@ stage('Upload Reports to DefectDojo') {
     }
 }
     }
-    stage('Deploy WAR to Tomcat') {
-    steps {
-        sshagent(['tomcat-vm-ssh-key']) {
-            script {
-                // Copy WAR to Tomcat VM
-                sh """
-                    echo "Deploying WAR to Tomcat..."
-                    scp $WORKSPACE/target/webapp.war tomcat@192.168.1.27:/opt/tomcat/webapps/webapp.war
-                """
-
-                // Optional: restart Tomcat service (uncomment if needed)
-                // sh """
-                //     ssh tomcat@192.168.1.27 'sudo systemctl restart tomcat'
-                // """
-            }
-        }
-    }
+   
 }
 
     
