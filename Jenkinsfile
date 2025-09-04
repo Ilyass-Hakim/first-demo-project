@@ -65,11 +65,20 @@ stage('Build & Package WAR') {
     agent { label 'maven_build_server' }
     steps {
         sh 'mvn clean package'
-        archiveArtifacts artifacts: 'target/*.war'
         stash includes: 'target/*.war', name: 'war-file'
     }
 }
 
+stage('Deploy WAR to Tomcat') {
+    agent { label 'any' } // or master
+    steps {
+        unstash 'war-file'
+        sh '''
+            echo "Deploying WAR..."
+            scp -i /var/lib/jenkins/.ssh/id_rsa -o StrictHostKeyChecking=no target/*.war tomcat@192.168.1.27:/opt/tomcat/webapps/
+        '''
+    }
+}
             
   stage('Run Semgrep remotely') {
     steps {
@@ -363,15 +372,6 @@ stage('Upload Reports to DefectDojo') {
                 }
             }
         }
-stage('Deploy WAR to Tomcat') {
-    steps {
-        unstash 'war-file'
-        sh '''
-            ssh -i /var/lib/jenkins/.ssh/id_rsa -o StrictHostKeyChecking=no tomcat@192.168.1.27 'echo Connected!'
-            scp -i /var/lib/jenkins/.ssh/id_rsa target/*.war tomcat@192.168.1.27:/opt/tomcat/webapps/
-        '''
-    }
-}
 
 
 
