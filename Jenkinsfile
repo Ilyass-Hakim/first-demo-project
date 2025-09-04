@@ -370,13 +370,34 @@ stage('Upload Reports to DefectDojo') {
                 }
             }
         }
- stage('Deploy WAR to Tomcat') {
+stage('Deploy WAR to Tomcat') {
     steps {
-        sshagent(['tomcat-server-ssh-key']) {
-            sh """
-                ssh -o StrictHostKeyChecking=no tomcat@192.168.1.27 'echo Connected!'
-                scp /home/jenkins/workspace/test-tomcat-deployment/target/*.war tomcat@192.168.1.27:/opt/tomcat/webapps/
-            """
+        script {
+            echo "Starting Deploy WAR stage..."
+
+            // Check SSH-related environment variables
+            sh 'echo SSH_AUTH_SOCK=$SSH_AUTH_SOCK'
+            sh 'echo HOME=$HOME'
+            sh 'ls -la ~/.ssh'
+
+            sshagent(['tomcat-server-ssh-key']) {
+                echo "Inside sshagent block"
+
+                // Check which keys are loaded
+                sh 'ssh-add -l || echo "No keys loaded in agent"'
+
+                // Test SSH connection
+                sh "ssh -o StrictHostKeyChecking=no tomcat@192.168.1.27 'echo Connected!'"
+
+                // Copy WAR file
+                sh """
+                    echo "Copying WAR file..."
+                    scp /home/jenkins/workspace/test-tomcat-deployment/target/*.war tomcat@192.168.1.27:/opt/tomcat/webapps/
+                    echo "WAR file copied"
+                """
+            }
+
+            echo "Finished Deploy WAR stage"
         }
     }
 }
