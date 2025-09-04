@@ -370,8 +370,9 @@ stage('Upload Reports to DefectDojo') {
                 }
             }
         }
-      stage('Deploy WAR to Tomcat') {
+    stage('Deploy WAR to Tomcat') {
     steps {
+        // Use the SSH credential stored in Jenkins
         sshagent(['tomcat-server-ssh-key']) {
             sh """
             echo "Copying WAR to Tomcat server..."
@@ -385,6 +386,10 @@ stage('Upload Reports to DefectDojo') {
         }
     }
 }
+
+
+
+        
 
     }
    
