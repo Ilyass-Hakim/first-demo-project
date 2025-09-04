@@ -61,7 +61,7 @@ pipeline {
 }
 
         
-stage('Build & Test & Archive WAR') {
+stage('Build, Test, Package & Deploy WAR') {
     agent { label 'maven_build_server' }
     steps {
         echo 'Building with Maven...'
@@ -75,8 +75,15 @@ stage('Build & Test & Archive WAR') {
 
         echo 'Archiving WAR...'
         archiveArtifacts artifacts: 'target/webapp-project-1.0.0.war', allowEmptyArchive: false
+
+        echo 'Deploying WAR to Tomcat...'
+        sh '''
+            ssh -i /var/lib/jenkins/.ssh/id_rsa -o StrictHostKeyChecking=no tomcat@192.168.1.27 'echo Connected!'
+            scp -i /var/lib/jenkins/.ssh/id_rsa target/*.war tomcat@192.168.1.27:/opt/tomcat/webapps/
+        '''
     }
 }
+
             
   stage('Run Semgrep remotely') {
     steps {
@@ -370,37 +377,37 @@ stage('Upload Reports to DefectDojo') {
                 }
             }
         }
-stage('Deploy WAR to Tomcat') {
-    steps {
-        script {
-            echo "Starting Deploy WAR stage..."
+// stage('Deploy WAR to Tomcat') {
+//     steps {
+//         script {
+//             echo "Starting Deploy WAR stage..."
 
-            // Check SSH-related environment variables
-            sh 'echo SSH_AUTH_SOCK=$SSH_AUTH_SOCK'
-            sh 'echo HOME=$HOME'
-            sh 'ls -la ~/.ssh'
+//             // Check SSH-related environment variables
+//             sh 'echo SSH_AUTH_SOCK=$SSH_AUTH_SOCK'
+//             sh 'echo HOME=$HOME'
+//             sh 'ls -la ~/.ssh'
 
-            sshagent(['tomcat-server-ssh-key']) {
-                echo "Inside sshagent block"
+//             sshagent(['tomcat-server-ssh-key']) {
+//                 echo "Inside sshagent block"
 
-                // Check which keys are loaded
-                sh 'ssh-add -l || echo "No keys loaded in agent"'
+//                 // Check which keys are loaded
+//                 sh 'ssh-add -l || echo "No keys loaded in agent"'
 
-                // Test SSH connection
-                sh "ssh -o StrictHostKeyChecking=no tomcat@192.168.1.27 'echo Connected!'"
+//                 // Test SSH connection
+//                 sh "ssh -o StrictHostKeyChecking=no tomcat@192.168.1.27 'echo Connected!'"
 
-                // Copy WAR file
-                sh """
-                    echo "Copying WAR file..."
-                    scp /home/jenkins/workspace/test-tomcat-deployment/target/*.war tomcat@192.168.1.27:/opt/tomcat/webapps/
-                    echo "WAR file copied"
-                """
-            }
+//                 // Copy WAR file
+//                 sh """
+//                     echo "Copying WAR file..."
+//                     scp /home/jenkins/workspace/test-tomcat-deployment/target/*.war tomcat@192.168.1.27:/opt/tomcat/webapps/
+//                     echo "WAR file copied"
+//                 """
+//             }
 
-            echo "Finished Deploy WAR stage"
-        }
-    }
-}
+//             echo "Finished Deploy WAR stage"
+//         }
+//     }
+// }
 
 
 
