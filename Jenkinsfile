@@ -108,7 +108,6 @@ pipeline {
             steps {
                 script {
                     sh 'mkdir -p $WORKSPACE/owasp-reports'
-                    sh 'chmod 777 $WORKSPACE/owasp-reports'
                     sh """
                     docker run --rm \\
                         -v "$WORKSPACE":/src \\
@@ -118,13 +117,8 @@ pipeline {
                         --scan /src \\
                         --format JSON \\
                         --out /reports \\
-                        --project "webapp-project-\$BUILD_NUMBER" || echo "OWASP scan completed with issues"
+                        --project "webapp-project-\$BUILD_NUMBER"
                     """
-                    sh '''
-                    if [ ! -f "$WORKSPACE/owasp-reports/dependency-check-report.json" ]; then
-                        echo '{"projectInfo":{"name":"webapp-project","reportDate":"'$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")'"},"dependencies":[]}' > $WORKSPACE/owasp-reports/dependency-check-report.json
-                    fi
-                    '''
                     sh 'ls -la $WORKSPACE/owasp-reports'
                 }
             }
@@ -257,14 +251,65 @@ pipeline {
                 }
             }
         }
+
+        // NEW STAGE: Configure Nginx Reverse Proxy
+stage('Configure Nginx Reverse Proxy') {
+    steps {
+        echo 'Setting up Nginx reverse proxy to Kubernetes service...'
+        withCredentials([sshUserPrivateKey(credentialsId: 'tomcat-server-ssh-key', keyFileVariable: 'PROXY_KEY')]) {
+            sh '''
+                cp ${PROXY_KEY} /tmp/proxy_key
+                chmod 600 /tmp/proxy_key
+                
+                # Create simple Nginx config
+                cat > nginx-proxy.conf << 'EOL'
+server {
+    listen 80;
+    server_name 192.168.1.27;
+    
+    location / {
+        proxy_pass http://192.168.1.12:31201;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
+    
+    location /nginx-health {
+        return 200 "OK";
+        add_header Content-Type text/plain;
+    }
+}
+EOL
+                
+                # Copy config to server
+                scp -i /tmp/proxy_key -o StrictHostKeyChecking=no nginx-proxy.conf tomcat@192.168.1.27:/tmp/
+                
+                # Configure Nginx
+                ssh -i /tmp/proxy_key -o StrictHostKeyChecking=no tomcat@192.168.1.27 "
+                    sudo cp /tmp/nginx-proxy.conf /etc/nginx/sites-available/webapp-proxy
+                    sudo ln -sf /etc/nginx/sites-available/webapp-proxy /etc/nginx/sites-enabled/webapp-proxy
+                    sudo rm -f /etc/nginx/sites-enabled/default
+                    sudo nginx -t && sudo systemctl reload nginx
+                    echo 'Nginx proxy configured successfully'
+                "
+                
+                # Cleanup
+                rm -f /tmp/proxy_key nginx-proxy.conf
+            '''
+        }
+    }
+}
+
+
+
         
     post {
         always {
             echo 'Cleaning up...'
             sh '''
-                rm -f /tmp/ansible_key
+                rm -f /tmp/ansible_key /tmp/proxy_key
                 rm -rf /tmp/kube
+                rm -f nginx-proxy.conf
             '''
             archiveArtifacts artifacts: 'target/*.war', allowEmptyArchive: true
             junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
@@ -273,6 +318,8 @@ pipeline {
             echo 'Pipeline completed successfully!'
             echo "Docker image pushed: ${IMAGE_NAME}:${BUILD_NUMBER}"
             echo "Application deployed to Kubernetes namespace: ${K8S_NAMESPACE}"
+            echo "Nginx reverse proxy configured at: http://${PROXY_SERVER}/"
+            echo "Proxy forwards requests to: http://${K8S_NODE_IP}:${K8S_NODE_PORT}"
         }
         failure {
             echo 'Pipeline failed! Check the logs for details.'
