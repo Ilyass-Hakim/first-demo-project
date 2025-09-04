@@ -370,15 +370,12 @@ stage('Upload Reports to DefectDojo') {
                 }
             }
         }
-    stage('Deploy WAR to Tomcat') {
+  stage('Deploy WAR to Tomcat') {
     steps {
-        // Use the SSH credential stored in Jenkins
         sshagent(['tomcat-server-ssh-key']) {
             sh """
             echo "Copying WAR to Tomcat server..."
-            scp -o StrictHostKeyChecking=no \
-                ${WORKSPACE}/target/webapp-project-1.0.0.war \
-                tomcat@192.168.1.27:/opt/tomcat/webapps/
+            scp -o StrictHostKeyChecking=no ${WORKSPACE}/target/webapp-project-1.0.0.war tomcat@192.168.1.27:/opt/tomcat/webapps/
 
             echo "Restarting Tomcat..."
             ssh -o StrictHostKeyChecking=no tomcat@192.168.1.27 'sudo systemctl restart tomcat'
@@ -386,6 +383,7 @@ stage('Upload Reports to DefectDojo') {
         }
     }
 }
+
 
 
 
