@@ -74,6 +74,12 @@ pipeline {
                 sh 'mvn test'
             }
         }
+        stage('Archive WAR') {
+    steps {
+        archiveArtifacts artifacts: 'target/webapp-project-1.0.0.war', allowEmptyArchive: false
+    }
+}
+
             
   stage('Run Semgrep remotely') {
     steps {
