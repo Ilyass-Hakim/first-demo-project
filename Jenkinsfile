@@ -409,4 +409,3 @@ stage('Upload Reports to DefectDojo') {
             echo 'Pipeline failed! Check the logs for details.'
         }
     }
-}
