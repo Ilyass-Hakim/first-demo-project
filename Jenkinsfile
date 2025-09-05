@@ -109,7 +109,6 @@ node('maven_build_server') {
         }
 
 stage('Upload Reports to DefectDojo') {
-    // no steps block
     script {
         withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'DEFECTDOJO_API_TOKEN')]) {
 
@@ -122,9 +121,39 @@ stage('Upload Reports to DefectDojo') {
             ]
 
             reports.each { report ->
+
                 def reportPath = report.path
                 def scanType = report.type
+                def scanTypeId = ''
 
+                // Check if scan type exists
+                def result = sh(
+                    script: """curl -s -k -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" -H "Accept: application/json" "${DEFECTDOJO_URL}/api/v2/test_types/?name=${scanType}" """,
+                    returnStdout: true
+                ).trim()
+
+                def json = readJSON text: result
+
+                if (json.count > 0) {
+                    scanTypeId = json.results[0].id
+                    echo "Found existing scan type '${scanType}' with ID ${scanTypeId}"
+                } else {
+                    // Create scan type if it does not exist
+                    echo "Scan type '${scanType}' not found. Creating..."
+                    def createResult = sh(
+                        script: """curl -s -k -X POST "${DEFECTDOJO_URL}/api/v2/test_types/" \\
+                        -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \\
+                        -H "Content-Type: application/json" \\
+                        -d '{ "name": "${scanType}", "active": true }'""",
+                        returnStdout: true
+                    ).trim()
+
+                    def createJson = readJSON text: createResult
+                    scanTypeId = createJson.id
+                    echo "Created scan type '${scanType}' with ID ${scanTypeId}"
+                }
+
+                // Upload report if file exists and is not empty
                 if (fileExists(reportPath)) {
                     def content = readFile(reportPath).trim()
                     if (content) {
@@ -136,7 +165,7 @@ stage('Upload Reports to DefectDojo') {
                         curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
                             -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \\
                             -F "engagement=${ENGAGEMENT_ID}" \\
-                            -F "scan_type='${scanType}'" \\
+                            -F "scan_type=${scanTypeId}" \\
                             -F "file=@${reportPath}"
                         """
                         echo "${scanType} uploaded successfully!"
