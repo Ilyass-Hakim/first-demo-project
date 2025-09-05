@@ -108,15 +108,46 @@ node('maven_build_server') {
             }
         }
 
-        stage('Upload Reports to DefectDojo') {
-            withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'API_TOKEN')]) {
-                script {
-                    // Simplified upload logic
-                    echo "Uploading security reports to DefectDojo..."
-                    // Add your DefectDojo upload steps here as in your pipeline
+      stage('Upload Reports to DefectDojo') {
+    steps {
+        script {
+            // Define reports
+            def reports = [
+                [path: "${WORKSPACE}/gitleaks-report.json", type: "Gitleaks JSON Report"],
+                [path: "${WORKSPACE}/owasp-reports/dependency-check-report.json", type: "Dependency-Check JSON Report"],
+                [path: "${WORKSPACE}/semgrep-report.json", type: "Semgrep JSON Report"]
+            ]
+
+            reports.each { report ->
+                def reportPath = report.path
+                def scanType = report.type
+
+                if (fileExists(reportPath)) {
+                    def content = readFile(reportPath).trim()
+                    if (content) {
+                        echo "=== Uploading ${scanType} ==="
+                        sh "ls -l ${reportPath}"
+                        sh "echo '--- First 20 lines of report ---'; head -n 20 ${reportPath}"
+
+                        sh """
+                        curl -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
+                          -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \\
+                          -F "engagement=${ENGAGEMENT_ID}" \\
+                          -F "scan_type='${scanType}'" \\
+                          -F "file=@${reportPath}"
+                        """
+                        echo "${scanType} uploaded successfully!"
+                    } else {
+                        echo "Report ${reportPath} is empty. Skipping upload."
+                    }
+                } else {
+                    echo "Report ${reportPath} does not exist. Skipping upload."
                 }
             }
         }
+    }
+}
+
 
         stage('SonarQube Analysis') {
             withSonarQubeEnv('sq1') {
