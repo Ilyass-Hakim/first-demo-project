@@ -123,13 +123,10 @@ stage('OWASP Dependency Check') {
               --out /reports \
               --project "jenkins-build"
         '''
-    }
-    post {
-        success {
-            archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.json', fingerprint: true
-        }
+        archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.json', fingerprint: true
     }
 }
+
 
 
 
