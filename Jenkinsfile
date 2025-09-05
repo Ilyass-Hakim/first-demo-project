@@ -108,43 +108,47 @@ node('maven_build_server') {
             }
         }
 
-     stage('Upload Reports to DefectDojo') {
-    script { // optional, can remove since you're already in scripted
-        // Define reports
-        def reports = [
-            [path: "${WORKSPACE}/gitleaks-report.json", type: "Gitleaks JSON Report"],
-            [path: "${WORKSPACE}/owasp-reports/dependency-check-report.json", type: "Dependency-Check JSON Report"],
-            [path: "${WORKSPACE}/semgrep-report.json", type: "Semgrep JSON Report"]
-        ]
+    stage('Upload Reports to DefectDojo') {
+    withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'DEFECTDOJO_API_TOKEN')]) {
+        script {
+            // Define the reports to upload
+            def reports = [
+                [path: "${WORKSPACE}/gitleaks-report.json", type: "Gitleaks JSON Report"],
+                [path: "${WORKSPACE}/owasp-reports/dependency-check-report.json", type: "Dependency-Check JSON Report"],
+                [path: "${WORKSPACE}/semgrep-report.json", type: "Semgrep JSON Report"]
+            ]
 
-        reports.each { report ->
-            def reportPath = report.path
-            def scanType = report.type
+            reports.each { report ->
+                def reportPath = report.path
+                def scanType = report.type
 
-            if (fileExists(reportPath)) {
-                def content = readFile(reportPath).trim()
-                if (content) {
-                    echo "=== Uploading ${scanType} ==="
-                    sh "ls -l ${reportPath}"
-                    sh "echo '--- First 20 lines of report ---'; head -n 20 ${reportPath}"
+                if (fileExists(reportPath)) {
+                    def content = readFile(reportPath).trim()
+                    if (content) {
+                        echo "=== Uploading ${scanType} ==="
+                        sh "ls -l ${reportPath}"
+                        sh "echo '--- First 20 lines of report ---'; head -n 20 ${reportPath}"
 
-                    sh """
-                    curl -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
-                      -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \\
-                      -F "engagement=${ENGAGEMENT_ID}" \\
-                      -F "scan_type='${scanType}'" \\
-                      -F "file=@${reportPath}"
-                    """
-                    echo "${scanType} uploaded successfully!"
+                        // Make sure ENGAGEMENT_ID is defined in your pipeline
+                        sh """
+                        curl -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
+                          -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \\
+                          -F "engagement=${ENGAGEMENT_ID}" \\
+                          -F "scan_type='${scanType}'" \\
+                          -F "file=@${reportPath}"
+                        """
+                        echo "${scanType} uploaded successfully!"
+                    } else {
+                        echo "Report ${reportPath} is empty. Skipping upload."
+                    }
                 } else {
-                    echo "Report ${reportPath} is empty. Skipping upload."
+                    echo "Report ${reportPath} does not exist. Skipping upload."
                 }
-            } else {
-                echo "Report ${reportPath} does not exist. Skipping upload."
             }
         }
     }
 }
+
 
 
 
