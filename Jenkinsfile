@@ -398,7 +398,7 @@ ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SE
 
     }
    
-}
+
 
     
     post {
