@@ -366,12 +366,12 @@ ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SE
 '
 """
 
-                # Copy kubeconfig to Ansible server
+                // Copy kubeconfig to Ansible server
                 sh """
                     scp -i /tmp/ansible_key -o StrictHostKeyChecking=no /tmp/kube/config ${ANSIBLE_USER}@${ANSIBLE_SERVER}:/tmp/kube/config
                 """
 
-                # Run Ansible playbook
+                // Run Ansible playbook
                 sh """
                     ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
                       ansible-playbook -i ${INVENTORY_FILE} \\
