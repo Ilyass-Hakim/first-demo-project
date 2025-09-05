@@ -356,14 +356,14 @@ stage('Upload Reports to DefectDojo') {
 
                 # Git clone or pull safely
                 sh """
-                    ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
-                      if [ -d "${ANSIBLE_BASE_DIR}/.git" ]; then
-                          cd ${ANSIBLE_BASE_DIR} && git reset --hard && git pull;
-                      else
-                          rm -rf ${ANSIBLE_BASE_DIR} && git clone ${REPO_URL} ${ANSIBLE_BASE_DIR};
-                      fi
-                      mkdir -p /tmp/kube
-                    '
+                ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
+                  if [ -d "${ANSIBLE_BASE_DIR}/.git" ]; then
+                      cd ${ANSIBLE_BASE_DIR} && git reset --hard && git pull;
+                  else
+                      rm -rf ${ANSIBLE_BASE_DIR} && git clone ${REPO_URL} ${ANSIBLE_BASE_DIR};
+                  fi
+                  mkdir -p /tmp/kube
+                '
                 """
 
                 # Copy kubeconfig to Ansible server
