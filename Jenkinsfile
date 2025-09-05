@@ -189,99 +189,84 @@ stage('Upload Reports to DefectDojo') {
     agent { label 'maven_build_server' }
     steps {
         withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'API_TOKEN')]) {
+            echo "Using DefectDojo token from Jenkins credentials."
+
+            // Get product ID
+            sh """
+                curl -s -H "Authorization: Token ${API_TOKEN}" \
+                "${DEFECTDOJO_URL}/api/v2/products/?name=webapp-project" \
+                | jq -r '.results[0].id' > product_id.txt
+            """
             script {
-                echo "Using DefectDojo token from Jenkins credentials."
-
-                def productName = 'webapp-project'
-                def engagementName = 'Jenkins-Build'
-                def engagementDesc = "Automated engagement for ${productName}"
-
-                // Get product ID
-                def productId = sh(script: 'curl -s -H "Authorization: Token ' + API_TOKEN + '" ' +
-                    '"' + DEFECTDOJO_URL + '/api/v2/products/?name=' + productName + '" | jq -r \'.results[0].id\'',
-                    returnStdout: true).trim()
-
-                if (productId == "null" || productId == "") {
-                    error "❌ Product '${productName}' does not exist in DefectDojo. Create it first."
+                def productId = readFile('product_id.txt').trim()
+                if (!productId || productId == "null") {
+                    error "❌ Product 'webapp-project' does not exist in DefectDojo. Create it first."
                 }
                 echo "✅ Found product ID: ${productId}"
+            }
 
-                // Get engagement ID
-                def engagementId = sh(script: 'curl -s -H "Authorization: Token ' + API_TOKEN + '" ' +
-                    '"' + DEFECTDOJO_URL + '/api/v2/engagements/?name=' + engagementName + '&product=' + productId + '" | jq -r \'.results[0].id\'',
-                    returnStdout: true).trim()
-
-                // Create engagement if not exists
-                if (engagementId == "null" || engagementId == "") {
+            // Get engagement ID
+            sh """
+                curl -s -H "Authorization: Token ${API_TOKEN}" \
+                "${DEFECTDOJO_URL}/api/v2/engagements/?name=Jenkins-Build&product=$(cat product_id.txt)" \
+                | jq -r '.results[0].id' > engagement_id.txt
+            """
+            script {
+                def engagementId = readFile('engagement_id.txt').trim()
+                if (!engagementId || engagementId == "null") {
                     echo "Engagement not found. Creating new engagement..."
-                    engagementId = sh(script: 'curl -s -X POST "' + DEFECTDOJO_URL + '/api/v2/engagements/" ' +
-                        '-H "Authorization: Token ' + API_TOKEN + '" ' +
-                        '-H "Content-Type: application/json" ' +
-                        '-d \'{' +
-                        '"name": "' + engagementName + '",' +
-                        '"description": "' + engagementDesc + '",' +
-                        '"product": ' + productId + ',' +
-                        '"status": "In Progress",' +
-                        '"target_start": "' + sh(script: 'date +%Y-%m-%d', returnStdout: true).trim() + '",' +
-                        '"target_end": "' + sh(script: 'date +%Y-%m-%d', returnStdout: true).trim() + '"' +
-                        '}\' | jq -r \'.id\'',
-                        returnStdout: true).trim()
+                    sh """
+                        curl -s -X POST "${DEFECTDOJO_URL}/api/v2/engagements/" \
+                        -H "Authorization: Token ${API_TOKEN}" \
+                        -H "Content-Type: application/json" \
+                        -d '{
+                            "name": "Jenkins-Build",
+                            "description": "Automated engagement for webapp-project",
+                            "product": $(cat product_id.txt),
+                            "status": "In Progress",
+                            "target_start": "$(date +%Y-%m-%d)",
+                            "target_end": "$(date +%Y-%m-%d)"
+                        }' | jq -r '.id' > engagement_id.txt
+                    """
+                    engagementId = readFile('engagement_id.txt').trim()
                     echo "✅ Created engagement ID: ${engagementId}"
                 } else {
                     echo "✅ Found existing engagement ID: ${engagementId}"
                 }
+            }
 
-                // Reports to upload with CORRECT scanner types
-               def reports = [
+            // Upload reports
+            def reports = [
                 [file: 'gitleaks-report.json', scanType: 'Generic Findings Import'],
                 [file: 'owasp-reports/dependency-check-report.json', scanType: 'Generic Findings Import'],
                 [file: 'semgrep-report.json', scanType: 'Generic Findings Import']
             ]
 
-                // Upload each report with better error handling
-                for (r in reports) {
-                    def filePath = r.file
-                    def scanType = r.scanType
-                    def description = r.description
-
-                    def fileExists = sh(script: "[ -f '${filePath}' ] && [ -s '${filePath}' ] && echo 'yes' || echo 'no'", returnStdout: true).trim()
-                    if (fileExists == 'yes') {
-                        echo "📤 Uploading ${filePath} as ${scanType}..."
-                        
-                        // Check file content first
-                        sh "echo 'File size:' && wc -c '${filePath}'"
-                        sh "echo 'First 200 chars:' && head -c 200 '${filePath}'"
-                        
-                        def uploadResponse = sh(script: '''
-                            curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
-                                 -H "Authorization: Token ${API_TOKEN}" \
-                                 -F "engagement=''' + engagementId + '''" \
-                                 -F "scan_date=$(date +%Y-%m-%d)" \
-                                 -F "minimum_severity=Info" \
-                                 -F "active=true" \
-                                 -F "verified=false" \
-                                 -F "scan_type=''' + scanType + '''" \
-                                 -F "file=@''' + filePath + '''" \
-                                 -w "HTTP_CODE:%{http_code}"
-                        ''', returnStdout: true).trim()
-                        
-                        echo "Upload response: ${uploadResponse}"
-                        
-                        if (uploadResponse.contains("HTTP_CODE:201") || uploadResponse.contains("HTTP_CODE:200")) {
-                            echo "✅ Successfully uploaded ${filePath}"
-                        } else {
-                            echo "❌ Failed to upload ${filePath}: ${uploadResponse}"
-                        }
-                    } else {
-                        echo "⚠️ File ${filePath} does not exist or is empty. Skipping."
-                    }
-                }
-
-                echo "🎉 DefectDojo upload process completed! Check engagement: ${DEFECTDOJO_URL}/engagement/${engagementId}"
+            reports.each { r ->
+                sh """
+                    if [ -s "${r.file}" ]; then
+                        echo "📤 Uploading ${r.file} as ${r.scanType}..."
+                        curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+                             -H "Authorization: Token ${API_TOKEN}" \
+                             -F "engagement=$(cat engagement_id.txt)" \
+                             -F "scan_date=$(date +%Y-%m-%d)" \
+                             -F "minimum_severity=Info" \
+                             -F "active=true" \
+                             -F "verified=false" \
+                             -F "scan_type=${r.scanType}" \
+                             -F "file=@${r.file}" \
+                             -w "HTTP_CODE:%{http_code}" > upload_response.txt
+                        cat upload_response.txt
+                    else
+                        echo "⚠️ File ${r.file} does not exist or is empty. Skipping."
+                    fi
+                """
             }
+            echo "🎉 DefectDojo upload process completed!"
         }
     }
 }
+
 
         
         stage('SonarQube Analysis') {
