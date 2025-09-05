@@ -189,30 +189,30 @@ stage('Upload Reports to DefectDojo') {
     agent { label 'maven_build_server' }
     steps {
         withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'API_TOKEN')]) {
-            echo "Using DefectDojo token from Jenkins credentials."
-
-            // Get product ID
-            sh """
-                curl -s -H "Authorization: Token ${API_TOKEN}" \
-                "${DEFECTDOJO_URL}/api/v2/products/?name=webapp-project" \
-                | jq -r '.results[0].id' > product_id.txt
-            """
             script {
+                echo "Using DefectDojo token from Jenkins credentials."
+
+                // Get product ID
+                sh """
+                    curl -s -H "Authorization: Token ${API_TOKEN}" \
+                    "${DEFECTDOJO_URL}/api/v2/products/?name=webapp-project" \
+                    | jq -r '.results[0].id' > product_id.txt
+                """
                 def productId = readFile('product_id.txt').trim()
                 if (!productId || productId == "null") {
                     error "❌ Product 'webapp-project' does not exist in DefectDojo. Create it first."
                 }
                 echo "✅ Found product ID: ${productId}"
-            }
 
-            // Get engagement ID
-            sh """
-                curl -s -H "Authorization: Token ${API_TOKEN}" \
-                "${DEFECTDOJO_URL}/api/v2/engagements/?name=Jenkins-Build&product=$(cat product_id.txt)" \
-                | jq -r '.results[0].id' > engagement_id.txt
-            """
-            script {
+                // Get engagement ID (shell handles $(...) so Groovy doesn't parse it)
+                sh """
+                    curl -s -H "Authorization: Token ${API_TOKEN}" \
+                    "${DEFECTDOJO_URL}/api/v2/engagements/?name=Jenkins-Build&product=${productId}" \
+                    | jq -r '.results[0].id' > engagement_id.txt
+                """
                 def engagementId = readFile('engagement_id.txt').trim()
+
+                // Create engagement if not exists
                 if (!engagementId || engagementId == "null") {
                     echo "Engagement not found. Creating new engagement..."
                     sh """
@@ -222,7 +222,7 @@ stage('Upload Reports to DefectDojo') {
                         -d '{
                             "name": "Jenkins-Build",
                             "description": "Automated engagement for webapp-project",
-                            "product": $(cat product_id.txt),
+                            "product": ${productId},
                             "status": "In Progress",
                             "target_start": "$(date +%Y-%m-%d)",
                             "target_end": "$(date +%Y-%m-%d)"
@@ -233,36 +233,37 @@ stage('Upload Reports to DefectDojo') {
                 } else {
                     echo "✅ Found existing engagement ID: ${engagementId}"
                 }
-            }
 
-            // Upload reports
-            def reports = [
-                [file: 'gitleaks-report.json', scanType: 'Generic Findings Import'],
-                [file: 'owasp-reports/dependency-check-report.json', scanType: 'Generic Findings Import'],
-                [file: 'semgrep-report.json', scanType: 'Generic Findings Import']
-            ]
+                // Reports to upload
+                def reports = [
+                    [file: 'gitleaks-report.json', scanType: 'Generic Findings Import'],
+                    [file: 'owasp-reports/dependency-check-report.json', scanType: 'Generic Findings Import'],
+                    [file: 'semgrep-report.json', scanType: 'Generic Findings Import']
+                ]
 
-            reports.each { r ->
-                sh """
-                    if [ -s "${r.file}" ]; then
+                // Upload each report
+                reports.each { r ->
+                    if (fileExists(r.file) && new File(r.file).length() > 0) {
                         echo "📤 Uploading ${r.file} as ${r.scanType}..."
-                        curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
-                             -H "Authorization: Token ${API_TOKEN}" \
-                             -F "engagement=$(cat engagement_id.txt)" \
-                             -F "scan_date=$(date +%Y-%m-%d)" \
-                             -F "minimum_severity=Info" \
-                             -F "active=true" \
-                             -F "verified=false" \
-                             -F "scan_type=${r.scanType}" \
-                             -F "file=@${r.file}" \
-                             -w "HTTP_CODE:%{http_code}" > upload_response.txt
-                        cat upload_response.txt
-                    else
+                        sh """
+                            curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \
+                                 -H "Authorization: Token ${API_TOKEN}" \
+                                 -F "engagement=${engagementId}" \
+                                 -F "scan_date=$(date +%Y-%m-%d)" \
+                                 -F "minimum_severity=Info" \
+                                 -F "active=true" \
+                                 -F "verified=false" \
+                                 -F "scan_type=${r.scanType}" \
+                                 -F "file=@${r.file}" \
+                                 -w "HTTP_CODE:%{http_code}"
+                        """
+                    } else {
                         echo "⚠️ File ${r.file} does not exist or is empty. Skipping."
-                    fi
-                """
+                    }
+                }
+
+                echo "🎉 DefectDojo upload process completed! Check engagement: ${DEFECTDOJO_URL}/engagement/${engagementId}"
             }
-            echo "🎉 DefectDojo upload process completed!"
         }
     }
 }
