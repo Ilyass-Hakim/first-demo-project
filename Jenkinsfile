@@ -354,7 +354,7 @@ stage('Upload Reports to DefectDojo') {
                     chmod 600 /tmp/kube/config
                 '''
 
-                # Git clone or pull safely
+                // Git clone or pull safely
                sh """
 ssh -i /tmp/ansible_key -o StrictHostKeyChecking=no ${ANSIBLE_USER}@${ANSIBLE_SERVER} '
   if [ -d "${ANSIBLE_BASE_DIR}/.git" ]; then
