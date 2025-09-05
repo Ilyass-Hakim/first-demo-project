@@ -126,9 +126,10 @@ stage('Upload Reports to DefectDojo') {
                 def scanType = report.type
                 def scanTypeId = ''
 
-                // Check if scan type exists
+                def scanTypeEncoded = URLEncoder.encode(scanType, "UTF-8")
+
                 def result = sh(
-                    script: """curl -s -k -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" -H "Accept: application/json" "${DEFECTDOJO_URL}/api/v2/test_types/?name=${scanType}" """,
+                    script: """curl -s -k -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" -H "Accept: application/json" "${DEFECTDOJO_URL}/api/v2/test_types/?name=${scanTypeEncoded}" """,
                     returnStdout: true
                 ).trim()
 
