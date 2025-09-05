@@ -192,10 +192,12 @@ stage('Upload Reports to DefectDojo') {
             script {
                 echo "Using DefectDojo token from Jenkins credentials."
 
-                // Get product ID
+                // ----------------------
+                // 1. Get Product ID
+                // ----------------------
                 sh """
                     curl -s -H "Authorization: Token ${API_TOKEN}" \
-                    "${DEFECTDOJO_URL}/api/v2/products/?name=webapp-project" \
+                         "${DEFECTDOJO_URL}/api/v2/products/?name=webapp-project" \
                     | jq -r '.results[0].id' > product_id.txt
                 """
                 def productId = readFile('product_id.txt').trim()
@@ -204,29 +206,35 @@ stage('Upload Reports to DefectDojo') {
                 }
                 echo "✅ Found product ID: ${productId}"
 
-                // Get engagement ID (shell handles $(...) so Groovy doesn't parse it)
+                // ----------------------
+                // 2. Get Engagement ID
+                // ----------------------
                 sh """
                     curl -s -H "Authorization: Token ${API_TOKEN}" \
-                    "${DEFECTDOJO_URL}/api/v2/engagements/?name=Jenkins-Build&product=${productId}" \
+                         "${DEFECTDOJO_URL}/api/v2/engagements/?name=Jenkins-Build&product=${productId}" \
                     | jq -r '.results[0].id' > engagement_id.txt
                 """
                 def engagementId = readFile('engagement_id.txt').trim()
 
-                // Create engagement if not exists
+                // ----------------------
+                // 3. Create Engagement if Missing
+                // ----------------------
                 if (!engagementId || engagementId == "null") {
                     echo "Engagement not found. Creating new engagement..."
+                    // We pass productId from Groovy, NOT inside single quotes
                     sh """
                         curl -s -X POST "${DEFECTDOJO_URL}/api/v2/engagements/" \
-                        -H "Authorization: Token ${API_TOKEN}" \
-                        -H "Content-Type: application/json" \
-                        -d '{
-                            "name": "Jenkins-Build",
-                            "description": "Automated engagement for webapp-project",
-                            "product": ${productId},
-                            "status": "In Progress",
-                            "target_start": "$(date +%Y-%m-%d)",
-                            "target_end": "$(date +%Y-%m-%d)"
-                        }' | jq -r '.id' > engagement_id.txt
+                             -H "Authorization: Token ${API_TOKEN}" \
+                             -H "Content-Type: application/json" \
+                             -d '{
+                                 "name": "Jenkins-Build",
+                                 "description": "Automated engagement for webapp-project",
+                                 "product": ${productId},
+                                 "status": "In Progress",
+                                 "target_start": "$(date +%Y-%m-%d)",
+                                 "target_end": "$(date +%Y-%m-%d)"
+                             }' \
+                        | jq -r '.id' > engagement_id.txt
                     """
                     engagementId = readFile('engagement_id.txt').trim()
                     echo "✅ Created engagement ID: ${engagementId}"
@@ -234,14 +242,19 @@ stage('Upload Reports to DefectDojo') {
                     echo "✅ Found existing engagement ID: ${engagementId}"
                 }
 
-                // Reports to upload
+                // ----------------------
+                // 4. Reports & Parsers
+                // ----------------------
+                // Use native DefectDojo parsers for accuracy
                 def reports = [
-                    [file: 'gitleaks-report.json', scanType: 'Generic Findings Import'],
-                    [file: 'owasp-reports/dependency-check-report.json', scanType: 'Generic Findings Import'],
-                    [file: 'semgrep-report.json', scanType: 'Generic Findings Import']
+                    [file: 'gitleaks-report.json', scanType: 'Gitleaks Scan'],
+                    [file: 'owasp-reports/dependency-check-report.json', scanType: 'Dependency Check Scan'],
+                    [file: 'semgrep-report.json', scanType: 'Semgrep JSON Report']
                 ]
 
-                // Upload each report
+                // ----------------------
+                // 5. Upload Reports
+                // ----------------------
                 reports.each { r ->
                     if (fileExists(r.file) && new File(r.file).length() > 0) {
                         echo "📤 Uploading ${r.file} as ${r.scanType}..."
@@ -262,7 +275,11 @@ stage('Upload Reports to DefectDojo') {
                     }
                 }
 
-                echo "🎉 DefectDojo upload process completed! Check engagement: ${DEFECTDOJO_URL}/engagement/${engagementId}"
+                echo "🎉 DefectDojo upload process completed!"
+                echo "➡️ Check engagement: ${DEFECTDOJO_URL}/engagement/${engagementId}"
+
+                // Cleanup temporary files
+                sh 'rm -f product_id.txt engagement_id.txt'
             }
         }
     }
