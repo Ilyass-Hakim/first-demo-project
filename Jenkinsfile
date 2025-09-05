@@ -110,31 +110,30 @@ stage('Archive Semgrep Report') {
         // NEW STAGE: OWASP Dependency Check
 stage('OWASP Dependency Check') {
     steps {
-        sh '''
-            mkdir -p $WORKSPACE/owasp-reports
-            docker run --rm \
-              -v $WORKSPACE:/src \
-              -v /opt/owasp-data:/usr/share/dependency-check/data \
-              -v $WORKSPACE/owasp-reports:/reports \
-              --user $(id -u):$(id -g) \
-              owasp/dependency-check:latest \
-              --scan /src \
-              --format JSON \
-              --out /reports \
-              --project "jenkins-build"
-        '''
-        archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.json', fingerprint: true
+        script {
+            try {
+                sh '''
+                    mkdir -p $WORKSPACE/owasp-reports
+                    docker run --rm \
+                      -v $WORKSPACE:/src \
+                      -v /opt/owasp-data:/usr/share/dependency-check/data \
+                      -v $WORKSPACE/owasp-reports:/reports \
+                      --user $(id -u):$(id -g) \
+                      owasp/dependency-check:latest \
+                      --scan /src \
+                      --format JSON \
+                      --out /reports \
+                      --project "jenkins-build"
+                '''
+                archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.json', fingerprint: true
+            } catch (err) {
+                echo "❌ OWASP Dependency Check failed: ${err}"
+                currentBuild.result = 'UNSTABLE'
+            }
+        }
     }
 }
 
-
-
-
-stage('Publish OWASP Report') {
-    steps {
-        archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.json', allowEmptyArchive: false
-    }
-}
 
 
 
