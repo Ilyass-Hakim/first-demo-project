@@ -116,9 +116,9 @@ stage('Upload Reports to DefectDojo') {
             def ENGAGEMENT_ID = '2'
 
             def reports = [
-                [path: "${WORKSPACE}/gitleaks-report.json", type: "Gitleaks JSON Report"],
-                [path: "${WORKSPACE}/owasp-reports/dependency-check-report.json", type: "Dependency-Check JSON Report"],
-                [path: "${WORKSPACE}/semgrep-report.json", type: "Semgrep JSON Report"]
+                [path: "${WORKSPACE}/gitleaks-report.json", type: "Gitleaks Scan"],
+                [path: "${WORKSPACE}/owasp-reports/dependency-check-report.json", type: "Dependency Check"],
+                [path: "${WORKSPACE}/semgrep-report.json", type: "Semgrep Scan"]
             ]
 
             reports.each { report ->
