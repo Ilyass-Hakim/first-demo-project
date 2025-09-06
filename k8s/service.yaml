@@ -7,7 +7,7 @@ spec:
     app: webapp
   ports:
     - protocol: TCP
-      port: 80         # The port you want to expose externally
-      targetPort: 8084 # The port your container listens on (Tomcat)
-  type: NodePort      # Exposes the service on a port on each node
+      port: 80        
+      targetPort: 8084 
+  type: NodePort      
 
