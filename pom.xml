@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>edu.FSTS.informatique</groupId>
@@ -10,7 +13,6 @@
   <packaging>war</packaging>
 
   <name>webapp-project Maven Webapp</name>
-  <!-- FIXME change it to the project's website -->
   <url>http://www.example.com</url>
 
   <properties>
@@ -20,24 +22,70 @@
   </properties>
 
   <dependencies>
+    <!-- Original test dependency -->
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <version>4.13.1</version>
       <scope>test</scope>
     </dependency>
+
+    <!-- Vulnerable Dependencies for OWASP Dependency-Check -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-text</artifactId>
+      <version>1.8</version> <!-- Text4Shell CVE-2022-42889 -->
+    </dependency>
+
+    <dependency>
+      <groupId>commons-collections</groupId>
+      <artifactId>commons-collections</artifactId>
+      <version>3.2.1</version> <!-- Deserialization CVE-2015-6420 -->
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-core</artifactId>
+      <version>5.0.0.RELEASE</version> <!-- Old Spring version with multiple CVEs -->
+    </dependency>
+
+    <!-- Optional: vulnerable logging library -->
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>2.14.0</version> <!-- Before Log4Shell fix -->
+    </dependency>
   </dependencies>
-<distributionManagement>
+
+  <distributionManagement>
     <snapshotRepository>
-        <id>snapshots</id>
-        <name>JfrogArtifactory-snapshots</name>
-        <url>http://192.168.1.23:8081/artifactory/libs-snapshot-local</url>
-</snapshotRepository>
- <repository>
-        <id>central</id>
-        <name>JfrogArtifactory-releases</name>
-        <url>http://192.168.1.23:8081/artifactory/libs-release-local</url>
+      <id>snapshots</id>
+      <name>JfrogArtifactory-snapshots</name>
+      <url>http://192.168.1.23:8081/artifactory/libs-snapshot-local</url>
+    </snapshotRepository>
+    <repository>
+      <id>central</id>
+      <name>JfrogArtifactory-releases</name>
+      <url>http://192.168.1.23:8081/artifactory/libs-release-local</url>
     </repository>
-</distributionManagement>
+  </distributionManagement>
+
+  <!-- Optional: configure maven plugin for OWASP check testing -->
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.owasp</groupId>
+        <artifactId>dependency-check-maven</artifactId>
+        <version>8.3.0</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 
 </project>
