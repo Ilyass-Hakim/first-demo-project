@@ -26,12 +26,11 @@ node('maven_build_server') {
             checkout scm
         }
 
-        stage('Gitleaks Scan') {
+stage('Gitleaks Scan') {
     echo 'Running Gitleaks secret scan...'
     sh '''
-        set -o pipefail
-        gitleaks detect --source . --report-format json --report-path $WORKSPACE/gitleaks-report.json || true
-        if [ ! -s "$WORKSPACE/gitleaks-report.json" ]; then
+        gitleaks detect --source . --report-path $WORKSPACE/gitleaks-report.json || exit_code=$?
+        if [ ! -f "$WORKSPACE/gitleaks-report.json" ]; then
             echo '{"results":[]}' > $WORKSPACE/gitleaks-report.json
             echo "No secrets found - created clean report"
         else
