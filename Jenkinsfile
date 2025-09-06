@@ -108,137 +108,97 @@ node('maven_build_server') {
             }
         }
 
-stage('Upload Reports to DefectDojo') {
-    script {
-        withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'DEFECTDOJO_API_TOKEN')]) {
-            
-            def ENGAGEMENT_ID = '2'
-            def DEFECTDOJO_URL = 'http://192.168.1.24:8081'
-
-            def reports = [
-                [path: "${WORKSPACE}/gitleaks-report.json", type: "Gitleaks Scan"],
-                [path: "${WORKSPACE}/owasp-reports/dependency-check-report.json", type: "Dependency Check"], 
-                [path: "${WORKSPACE}/semgrep-report.json", type: "Semgrep Scan"]
-            ]
-
-            reports.each { report ->
-                def reportPath = report.path
-                def scanType = report.type
-                def scanTypeId = null
-
-                echo "Processing ${scanType}..."
-                
-                // Properly URL encode the scan type name
-                def scanTypeEncoded = java.net.URLEncoder.encode(scanType, "UTF-8")
-
-                // Check if scan type exists
-                def checkCommand = """curl -s -k -H "Authorization: Token \${DEFECTDOJO_API_TOKEN}" -H "Accept: application/json" "${DEFECTDOJO_URL}/api/v2/test_types/?name=${scanTypeEncoded}" """
-                
-                def result = sh(script: checkCommand, returnStdout: true).trim()
-                echo "Scan type lookup response: ${result}"
-
-                try {
-                    def json = readJSON text: result
-                    
-                    if (json.count && json.count > 0) {
-                        scanTypeId = json.results[0].id
-                        echo "Found existing scan type '${scanType}' with ID ${scanTypeId}"
-                    } else {
-                        // Create scan type if it does not exist
-                        echo "Scan type '${scanType}' not found. Creating..."
+stage('Upload to DefectDojo') {
+            steps {
+                withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'DEFECTDOJO_API_TOKEN')]) {
+                    script {
+                        def defectDojoUrl = 'http://192.168.1.24:8081'
+                        def engagementId = '2'
+                        def environment = 'Development'
                         
-                        // Use proper JSON formatting and escape quotes
-                        def createCommand = """curl -s -k -X POST "${DEFECTDOJO_URL}/api/v2/test_types/" \\
-                            -H "Authorization: Token \${DEFECTDOJO_API_TOKEN}" \\
-                            -H "Content-Type: application/json" \\
-                            -d '{"name": "${scanType}", "active": true}'"""
-
-                        def createResult = sh(script: createCommand, returnStdout: true).trim()
-                        echo "Create scan type response: ${createResult}"
+                        echo "Starting DefectDojo uploads..."
                         
-                        try {
-                            def createJson = readJSON text: createResult
-                            if (createJson.id) {
-                                scanTypeId = createJson.id
-                                echo "✅ Created scan type '${scanType}' with ID ${scanTypeId}"
+                        // Upload Gitleaks report
+                        if (fileExists('gitleaks-report.json')) {
+                            echo "Uploading Gitleaks report to DefectDojo..."
+                            def gitleaksResponse = sh(
+                                script: """
+                                    curl -s -X POST "${defectDojoUrl}/api/v2/import-scan/" \\
+                                         -H "Authorization: Token \${DEFECTDOJO_API_TOKEN}" \\
+                                         -F "engagement=${engagementId}" \\
+                                         -F "scan_type=Gitleaks Scan" \\
+                                         -F "environment=${environment}" \\
+                                         -F "file=@gitleaks-report.json"
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            echo "Gitleaks upload response: ${gitleaksResponse}"
+                            
+                            if (gitleaksResponse.contains('"test_id"') || gitleaksResponse.contains('"id"')) {
+                                echo "✓ Gitleaks report uploaded successfully"
                             } else {
-                                echo "❌ Failed to create scan type. Full response: ${createResult}"
-                                
-                                // Try to find the scan type again (maybe it was created but response was malformed)
-                                echo "Retrying scan type lookup..."
-                                def retryResult = sh(script: checkCommand, returnStdout: true).trim()
-                                def retryJson = readJSON text: retryResult
-                                if (retryJson.count && retryJson.count > 0) {
-                                    scanTypeId = retryJson.results[0].id
-                                    echo "Found scan type on retry with ID ${scanTypeId}"
-                                }
+                                echo "⚠ Gitleaks upload may have failed: ${gitleaksResponse}"
                             }
-                        } catch (Exception parseEx) {
-                            echo "Error parsing create response: ${parseEx.message}"
-                            echo "Raw create response: ${createResult}"
+                        } else {
+                            echo "⚠ Gitleaks report not found, skipping upload"
                         }
+                        
+                        // Upload Dependency Check report
+                        if (fileExists('owasp-reports/dependency-check-report.json')) {
+                            echo "Uploading Dependency Check report to DefectDojo..."
+                            def depCheckResponse = sh(
+                                script: """
+                                    curl -s -X POST "${defectDojoUrl}/api/v2/import-scan/" \\
+                                         -H "Authorization: Token \${DEFECTDOJO_API_TOKEN}" \\
+                                         -F "engagement=${engagementId}" \\
+                                         -F "scan_type=Dependency Check Scan" \\
+                                         -F "environment=${environment}" \\
+                                         -F "file=@owasp-reports/dependency-check-report.json"
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            echo "Dependency Check upload response: ${depCheckResponse}"
+                            
+                            if (depCheckResponse.contains('"test_id"') || depCheckResponse.contains('"id"')) {
+                                echo "✓ Dependency Check report uploaded successfully"
+                            } else {
+                                echo "⚠ Dependency Check upload may have failed: ${depCheckResponse}"
+                            }
+                        } else {
+                            echo "⚠ Dependency Check report not found, skipping upload"
+                        }
+                        
+                        // Upload Semgrep report
+                        if (fileExists('semgrep-report.json')) {
+                            echo "Uploading Semgrep report to DefectDojo..."
+                            def semgrepResponse = sh(
+                                script: """
+                                    curl -s -X POST "${defectDojoUrl}/api/v2/import-scan/" \\
+                                         -H "Authorization: Token \${DEFECTDOJO_API_TOKEN}" \\
+                                         -F "engagement=${engagementId}" \\
+                                         -F "scan_type=Semgrep Scan" \\
+                                         -F "environment=${environment}" \\
+                                         -F "file=@semgrep-report.json"
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            echo "Semgrep upload response: ${semgrepResponse}"
+                            
+                            if (semgrepResponse.contains('"test_id"') || semgrepResponse.contains('"id"')) {
+                                echo "✓ Semgrep report uploaded successfully"
+                            } else {
+                                echo "⚠ Semgrep upload may have failed: ${semgrepResponse}"
+                            }
+                        } else {
+                            echo "⚠ Semgrep report not found, skipping upload"
+                        }
+                        
+                        echo "DefectDojo uploads completed. Check your DefectDojo engagement for results:"
+                        echo "${defectDojoUrl}/engagement/${engagementId}"
                     }
-                } catch (Exception e) {
-                    echo "Error processing scan type lookup: ${e.message}"
-                    echo "Raw lookup response: ${result}"
                 }
-
-                // Upload report if file exists
-                if (fileExists(reportPath)) {
-                    def content = readFile(reportPath).trim()
-                    if (content && content.length() > 20) {
-                        // Skip empty gitleaks reports
-                        if (scanType == "Gitleaks Scan" && content == '{"results":[]}') {
-                            echo "Gitleaks report is empty (no secrets found). Skipping upload."
-                            return
-                        }
-                        
-                        echo "=== Uploading ${scanType} ==="
-                        sh "ls -l ${reportPath}"
-                        sh "echo '--- First 5 lines of report ---'; head -n 5 ${reportPath}"
-
-                        def uploadCommand = """curl -s -X POST "${DEFECTDOJO_URL}/api/v2/import-scan/" \\
-                            -H "Authorization: Token \${DEFECTDOJO_API_TOKEN}" \\
-                            -F "engagement=${ENGAGEMENT_ID}" \\
-                            -F "scan_type=${scanTypeId}" \\
-                            -F "file=@${reportPath}" """
-
-                        def uploadResult = sh(script: uploadCommand, returnStdout: true).trim()
-                        echo "Upload response: ${uploadResult}"
-                        
-                        // Parse upload response
-                        try {
-                            def uploadJson = readJSON text: uploadResult
-                            if (uploadJson.test) {
-                                echo "✅ ${scanType} uploaded successfully! Test ID: ${uploadJson.test}"
-                            } else if (uploadJson.detail && uploadJson.detail.contains("Invalid token")) {
-                                echo "❌ Upload failed: Invalid token"
-                            } else if (uploadJson.detail) {
-                                echo "❌ Upload failed: ${uploadJson.detail}"
-                            } else {
-                                echo "⚠️ Upload response unclear: ${uploadResult}"
-                            }
-                        } catch (Exception uploadEx) {
-                            if (uploadResult.contains("Invalid token")) {
-                                echo "❌ Upload failed: Invalid token"
-                            } else if (uploadResult.contains("error") || uploadResult.contains("Error")) {
-                                echo "❌ Upload failed: ${uploadResult}"
-                            } else {
-                                echo "✅ ${scanType} likely uploaded successfully (non-JSON response)"
-                            }
-                        }
-                    } else {
-                        echo "Report ${reportPath} is empty or too small. Skipping upload."
-                    }
-                } else {
-                    echo "❌ Report file ${reportPath} does not exist"
-                }
-                
-                echo "--- End processing ${scanType} ---\n"
             }
         }
-    }
-}
 
 
 
