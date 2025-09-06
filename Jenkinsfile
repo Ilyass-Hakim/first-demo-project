@@ -176,8 +176,9 @@ stage('Upload to DefectDojo') {
                 echo "Uploading Semgrep report to DefectDojo..."
                 def semgrepResponse = sh(
                     script: """
+                        export DD_TOKEN="\${DEFECTDOJO_API_TOKEN}"
                         curl -s -X POST "${defectDojoUrl}/api/v2/import-scan/" \\
-                             -H "Authorization: Token \${DEFECTDOJO_API_TOKEN}" \\
+                             -H "Authorization: Token \${DD_TOKEN}" \\
                              -F "engagement=${engagementId}" \\
                              -F "scan_type=Semgrep Scan" \\
                              -F "environment=${environment}" \\
