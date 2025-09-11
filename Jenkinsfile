@@ -58,11 +58,11 @@ stage('Gitleaks Scan') {
             sshagent(['sonarqube-server-credentials']) {
                 sh '''
                     mkdir -p ~/.ssh
-                    ssh-keyscan -H 192.168.1.2 >> ~/.ssh/known_hosts 2>/dev/null || true
-                    ssh sonarqube@192.168.1.2 "mkdir -p /home/sonarqube/projects/firstDevopsProject"
-                    rsync -avz --delete $WORKSPACE/ sonarqube@192.168.1.2:/home/sonarqube/projects/firstDevopsProject/
-                    ssh sonarqube@192.168.1.2 "cd /home/sonarqube/projects/firstDevopsProject && /opt/ci-scripts/run-semgrep.sh"
-                    scp sonarqube@192.168.1.2:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
+                    ssh-keyscan -H 192.168.1.30 >> ~/.ssh/known_hosts 2>/dev/null || true
+                    ssh sonarqube@192.168.1.30 "mkdir -p /home/sonarqube/projects/firstDevopsProject"
+                    rsync -avz --delete $WORKSPACE/ sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/
+                    ssh sonarqube@192.168.1.30 "cd /home/sonarqube/projects/firstDevopsProject && /opt/ci-scripts/run-semgrep.sh"
+                    scp sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
                 '''
             }
         }
