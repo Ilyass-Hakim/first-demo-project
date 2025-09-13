@@ -29,7 +29,7 @@ node('maven_build_server') {
 stage('Gitleaks Scan') {
     echo 'Running Gitleaks secret scan...'
     sh '''
-        set -eo pipefail
+        set -e
 
         # Ensure full git history so Gitleaks can scan past commits
         if git rev-parse --is-shallow-repository >/dev/null 2>&1; then
@@ -70,6 +70,7 @@ stage('Gitleaks Scan') {
         }
     }
 }
+
 
 
 
