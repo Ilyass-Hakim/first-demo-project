@@ -147,7 +147,7 @@ stage('Gitleaks Scan') {
 stage('Upload to DefectDojo') {
     withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'DEFECTDOJO_API_TOKEN')]) {
         def defectDojoUrl = 'http://192.168.1.24:8081'
-        def engagementId = '2'
+        def engagementId = '1'
         def environment = 'Development'
         
         echo "Starting DefectDojo uploads..."
