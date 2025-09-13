@@ -27,18 +27,49 @@ node('maven_build_server') {
         }
 
 stage('Gitleaks Scan') {
-    echo 'Running Gitleaks secret scan...'
-    sh '''
-        gitleaks detect --source . --report-path $WORKSPACE/gitleaks-report.json || exit_code=$?
-        if [ ! -f "$WORKSPACE/gitleaks-report.json" ]; then
-            echo '{"results":[]}' > $WORKSPACE/gitleaks-report.json
-            echo "No secrets found - created clean report"
-        else
-            echo "Secrets detected - report generated"
-        fi
-    '''
-    archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
+    steps {
+        echo 'Running Gitleaks secret scan...'
+        sh '''
+            set -eo pipefail
+
+            # Ensure full git history so Gitleaks can scan past commits
+            git rev-parse --is-shallow-repository >/dev/null 2>&1 && \
+              git fetch --prune --unshallow || true
+
+            mkdir -p "$WORKSPACE"
+
+            # Run Gitleaks via Docker for consistent versioning
+            docker run --rm \
+              -v "$WORKSPACE":"$WORKSPACE" \
+              -w "$WORKSPACE" \
+              zricethezav/gitleaks:latest detect \
+                --source "$WORKSPACE" \
+                --report-format json \
+                --report-path "$WORKSPACE/gitleaks-report.json" \
+                --redact \
+              || true  # gitleaks exits 1 if leaks found; keep pipeline going
+
+            if [ ! -s "$WORKSPACE/gitleaks-report.json" ]; then
+              echo '[]' > "$WORKSPACE/gitleaks-report.json"
+              echo "No report produced by Gitleaks; wrote empty JSON array."
+            fi
+        '''
+
+        archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: false
+
+        // Mark build UNSTABLE if leaks were found
+        script {
+            def txt = readFile('gitleaks-report.json').trim()
+            if (txt && txt != '[]') {
+                currentBuild.result = 'UNSTABLE'
+                echo 'Gitleaks detected secrets. Marking build as UNSTABLE.'
+            } else {
+                echo 'No secrets detected by Gitleaks.'
+            }
+        }
+    }
 }
+
 
 
         stage('Build & Package WAR') {
