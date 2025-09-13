@@ -71,7 +71,7 @@ stage('Gitleaks Scan') {
             archiveArtifacts artifacts: 'semgrep-report.json', fingerprint: true
         }
 
-        stage('OWASP Dependency Check') {
+               stage('OWASP Dependency Check') {
             sh '''
                 mkdir -p $WORKSPACE/owasp-reports
                 docker run --rm \
@@ -81,12 +81,13 @@ stage('Gitleaks Scan') {
                     --user $(id -u):$(id -g) \
                     owasp/dependency-check:latest \
                     --scan /src \
-                    --format JSON \
+                    --format ALL \
                     --out /reports \
                     --project "jenkins-build"
             '''
-            archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.json', fingerprint: true
+            archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.*', fingerprint: true
         }
+
 
         stage('Validate Security Reports') {
             script {
