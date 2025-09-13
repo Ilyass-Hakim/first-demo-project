@@ -27,48 +27,50 @@ node('maven_build_server') {
         }
 
 stage('Gitleaks Scan') {
-    steps {
-        echo 'Running Gitleaks secret scan...'
-        sh '''
-            set -eo pipefail
+    echo 'Running Gitleaks secret scan...'
+    sh '''
+        set -eo pipefail
 
-            # Ensure full git history so Gitleaks can scan past commits
-            git rev-parse --is-shallow-repository >/dev/null 2>&1 && \
-              git fetch --prune --unshallow || true
+        # Ensure full git history so Gitleaks can scan past commits
+        if git rev-parse --is-shallow-repository >/dev/null 2>&1; then
+          git fetch --prune --unshallow || true
+        else
+          git fetch --all --prune || true
+        fi
 
-            mkdir -p "$WORKSPACE"
+        mkdir -p "$WORKSPACE"
 
-            # Run Gitleaks via Docker for consistent versioning
-            docker run --rm \
-              -v "$WORKSPACE":"$WORKSPACE" \
-              -w "$WORKSPACE" \
-              zricethezav/gitleaks:latest detect \
-                --source "$WORKSPACE" \
-                --report-format json \
-                --report-path "$WORKSPACE/gitleaks-report.json" \
-                --redact \
-              || true  # gitleaks exits 1 if leaks found; keep pipeline going
+        # Run Gitleaks via Docker for consistent versioning
+        docker run --rm \
+          -v "$WORKSPACE":"$WORKSPACE" \
+          -w "$WORKSPACE" \
+          zricethezav/gitleaks:latest detect \
+            --source "$WORKSPACE" \
+            --report-format json \
+            --report-path "$WORKSPACE/gitleaks-report.json" \
+            --redact \
+          || true  # gitleaks exits 1 if leaks found; keep pipeline going
 
-            if [ ! -s "$WORKSPACE/gitleaks-report.json" ]; then
-              echo '[]' > "$WORKSPACE/gitleaks-report.json"
-              echo "No report produced by Gitleaks; wrote empty JSON array."
-            fi
-        '''
+        # Ensure we always have a JSON file to archive
+        if [ ! -s "$WORKSPACE/gitleaks-report.json" ]; then
+          echo '[]' > "$WORKSPACE/gitleaks-report.json"
+          echo "No report produced by Gitleaks; wrote empty JSON array."
+        fi
+    '''
 
-        archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: false
+    archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: false
 
-        // Mark build UNSTABLE if leaks were found
-        script {
-            def txt = readFile('gitleaks-report.json').trim()
-            if (txt && txt != '[]') {
-                currentBuild.result = 'UNSTABLE'
-                echo 'Gitleaks detected secrets. Marking build as UNSTABLE.'
-            } else {
-                echo 'No secrets detected by Gitleaks.'
-            }
+    script {
+        def txt = readFile('gitleaks-report.json').trim()
+        if (txt && txt != '[]') {
+            currentBuild.result = 'UNSTABLE'
+            echo 'Gitleaks detected secrets. Marking build as UNSTABLE.'
+        } else {
+            echo 'No secrets detected by Gitleaks.'
         }
     }
 }
+
 
 
 
