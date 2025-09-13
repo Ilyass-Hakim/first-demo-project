@@ -148,78 +148,91 @@ stage('Upload to DefectDojo') {
     withCredentials([string(credentialsId: 'DEFECTDOJO_TOKEN', variable: 'DEFECTDOJO_API_TOKEN')]) {
         def defectDojoUrl = 'http://192.168.1.24:8081'
         def engagementId = '1'
-        def environment  = 'Development'
+        def environment = 'Development'
 
         echo "Starting DefectDojo uploads..."
 
-        // Debug workspace
         sh '''
-          set -e
-          echo "Current directory: $(pwd)"
-          echo "Workspace listing (top level):"
-          ls -la || true
-          echo "JSON & XML candidates:"
-          find . -maxdepth 3 -type f \\( -name "*.json" -o -name "*.xml" \\) | sed -e 's/^/ - /'
+            set -e
+            echo "Current directory: $(pwd)"
+            echo "Workspace listing (top level):"
+            ls -la
+            echo "JSON & XML candidates:"
+            find . -maxdepth 3 -type f \\( -name "*.json" -o -name "*.xml" \\) | sed -e 's/^/ - /'
         '''
 
         // Gitleaks
         sh """
-          if [ -f 'gitleaks-report.json' ]; then
-            echo 'Uploading Gitleaks report...'
-            echo 'File size: ' \$(wc -c gitleaks-report.json)
-            RESPONSE=\$(curl -s -X POST '${defectDojoUrl}/api/v2/import-scan/' \\
-              -H 'Authorization: Token ${DEFECTDOJO_API_TOKEN}' \\
-              -F engagement='${engagementId}' \\
-              -F scan_type='Gitleaks Scan' \\
-              -F environment='${environment}' \\
-              -F file=@gitleaks-report.json)
-            echo "Gitleaks response: \$RESPONSE"
-            echo "\$RESPONSE" | grep -q '\"test_id\"\\|\"id\"' && echo 'Gitleaks uploaded successfully' || echo 'Gitleaks upload response unclear'
-          else
-            echo 'gitleaks-report.json not found'
-          fi
+            if [ -f "gitleaks-report.json" ]; then
+                echo "Uploading Gitleaks report..."
+                echo "File size:  $(wc -c gitleaks-report.json)"
+                RESPONSE=\$(curl -s -X POST "${defectDojoUrl}/api/v2/import-scan/" \
+                    -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \
+                    -F "engagement=${engagementId}" \
+                    -F "scan_type=Gitleaks Scan" \
+                    -F "environment=${environment}" \
+                    -F "file=@gitleaks-report.json")
+                echo "Gitleaks response: \$RESPONSE"
+                echo "\$RESPONSE" | grep -q 'test_id\\|\"id\"' && echo "Gitleaks uploaded successfully"
+            else
+                echo "gitleaks-report.json not found"
+            fi
         """
 
-        // Dependency-Check (use XML)
+        // Dependency-Check (use XML; correct scan_type is 'Dependency Check Scan')
         sh """
-          FILE_XML='owasp-reports/dependency-check-report.xml'
-          if [ -f "\$FILE_XML" ]; then
-            echo 'Uploading Dependency-Check XML report...'
-            echo 'File size: ' \$(wc -c "\$FILE_XML")
-            RESPONSE=\$(curl -s -X POST '${defectDojoUrl}/api/v2/import-scan/' \\
-              -H 'Authorization: Token ${DEFECTDOJO_API_TOKEN}' \\
-              -F engagement='${engagementId}' \\
-              -F scan_type='Dependency Check' \\
-              -F environment='${environment}' \\
-              -F file=@"\$FILE_XML")
-            echo "Dependency-Check response: \$RESPONSE"
-            echo "\$RESPONSE" | grep -q '\"test_id\"\\|\"id\"' && echo 'Dependency-Check uploaded successfully' || echo 'Dependency-Check upload response unclear'
-          else
-            echo 'Dependency-Check XML not found at owasp-reports/dependency-check-report.xml'
-          fi
+            FILE_XML="owasp-reports/dependency-check-report.xml"
+            FILE_JSON="owasp-reports/dependency-check-report.json"
+
+            if [ -f "\$FILE_XML" ]; then
+                echo "Uploading Dependency-Check XML report..."
+                echo "File size:  \$(wc -c "\$FILE_XML")"
+                RESPONSE=\$(curl -s -X POST "${defectDojoUrl}/api/v2/import-scan/" \
+                    -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \
+                    -F "engagement=${engagementId}" \
+                    -F "scan_type=Dependency Check Scan" \
+                    -F "environment=${environment}" \
+                    -F "file=@\${FILE_XML}")
+                echo "Dependency-Check response: \$RESPONSE"
+                echo "\$RESPONSE" | grep -q 'test_id\\|\"id\"' && echo "Dependency-Check uploaded successfully" || echo "Dependency-Check upload response unclear"
+            elif [ -f "\$FILE_JSON" ]; then
+                echo "XML not found; uploading Dependency-Check JSON instead..."
+                echo "File size:  \$(wc -c "\$FILE_JSON")"
+                RESPONSE=\$(curl -s -X POST "${defectDojoUrl}/api/v2/import-scan/" \
+                    -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \
+                    -F "engagement=${engagementId}" \
+                    -F "scan_type=Dependency Check Scan" \
+                    -F "environment=${environment}" \
+                    -F "file=@\${FILE_JSON}")
+                echo "Dependency-Check response: \$RESPONSE"
+                echo "\$RESPONSE" | grep -q 'test_id\\|\"id\"' && echo "Dependency-Check uploaded successfully" || echo "Dependency-Check upload response unclear"
+            else
+                echo "No Dependency-Check report found under owasp-reports/"
+            fi
         """
 
-        // Semgrep (JSON)
+        // Semgrep (use the scan type that worked for you)
         sh """
-          if [ -f 'semgrep-report.json' ]; then
-            echo 'Uploading Semgrep report...'
-            echo 'File size: ' \$(wc -c semgrep-report.json)
-            RESPONSE=\$(curl -s -X POST '${defectDojoUrl}/api/v2/import-scan/' \\
-              -H 'Authorization: Token ${DEFECTDOJO_API_TOKEN}' \\
-              -F engagement='${engagementId}' \\
-              -F scan_type='Semgrep JSON Report' \\
-              -F environment='${environment}' \\
-              -F file=@semgrep-report.json)
-            echo "Semgrep response: \$RESPONSE"
-            echo "\$RESPONSE" | grep -q '\"test_id\"\\|\"id\"' && echo 'Semgrep uploaded successfully' || echo 'Semgrep upload response unclear'
-          else
-            echo 'semgrep-report.json not found in workspace'
-          fi
+            if [ -f "semgrep-report.json" ]; then
+                echo "Uploading Semgrep report..."
+                echo "File size:  \$(wc -c semgrep-report.json)"
+                RESPONSE=\$(curl -s -X POST "${defectDojoUrl}/api/v2/import-scan/" \
+                    -H "Authorization: Token ${DEFECTDOJO_API_TOKEN}" \
+                    -F "engagement=${engagementId}" \
+                    -F "scan_type=Semgrep JSON Report" \
+                    -F "environment=${environment}" \
+                    -F "file=@semgrep-report.json")
+                echo "Semgrep response: \$RESPONSE"
+                echo "\$RESPONSE" | grep -q 'test_id\\|\"id\"' && echo "Semgrep uploaded successfully" || echo "Semgrep upload response unclear"
+            else
+                echo "semgrep-report.json not found"
+            fi
         """
 
         echo "DefectDojo uploads completed. Check: ${defectDojoUrl}/engagement/${engagementId}"
     }
 }
+
 
 
 
