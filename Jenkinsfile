@@ -101,12 +101,11 @@ node('maven_build_server') {
                     ssh sonarqube@192.168.1.30 "cd /home/sonarqube/projects/firstDevopsProject && /opt/ci-scripts/run-semgrep.sh"
                     scp sonarqube@192.168.1.30:/home/sonarqube/projects/firstDevopsProject/semgrep-report.json $WORKSPACE/
                 '''
+               
             }
+              archiveArtifacts artifacts: 'semgrep-report.json', fingerprint: true
         }
 
-        stage('Archive Semgrep Report') {
-            archiveArtifacts artifacts: 'semgrep-report.json', fingerprint: true
-        }
 
         
          stage('OWASP Dependency Check') {
