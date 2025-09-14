@@ -87,6 +87,12 @@ stage('Gitleaks Scan') {
                 scp -i /var/lib/jenkins/.ssh/id_rsa -o StrictHostKeyChecking=no target/*.war tomcat@192.168.1.27:/opt/tomcat/webapps/
             '''
         }
+             
+        stage('SonarQube Analysis') {
+            withSonarQubeEnv('sq1') {
+                sh 'mvn sonar:sonar'
+            }
+        }
 
         stage('Run Semgrep remotely') {
             sshagent(['sonarqube-server-credentials']) {
@@ -238,11 +244,7 @@ stage('Upload to DefectDojo') {
 
 
 
-        stage('SonarQube Analysis') {
-            withSonarQubeEnv('sq1') {
-                sh 'mvn sonar:sonar'
-            }
-        }
+
 
         stage('Package & Deploy to Artifactory') {
             sh 'mvn clean deploy'
