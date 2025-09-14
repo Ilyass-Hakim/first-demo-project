@@ -15,7 +15,6 @@ node('maven_build_server') {
     env.ANSIBLE_BASE_DIR = '/home/ansible/ansible/'
     env.INVENTORY_FILE = "${env.ANSIBLE_BASE_DIR}/inventories/hosts.yml"
     env.PLAYBOOK_FILE = "${env.ANSIBLE_BASE_DIR}/first-demo-project/kubernetes-deployment.yml"
-    env.DEFECTDOJO_URL = 'http://192.168.1.24:8081'
 
 
     try {
