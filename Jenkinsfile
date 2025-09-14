@@ -16,8 +16,7 @@ node('maven_build_server') {
     env.INVENTORY_FILE = "${env.ANSIBLE_BASE_DIR}/inventories/hosts.yml"
     env.PLAYBOOK_FILE = "${env.ANSIBLE_BASE_DIR}/first-demo-project/kubernetes-deployment.yml"
     env.DEFECTDOJO_URL = 'http://192.168.1.24:8081'
-    env.DEFECTDOJO_USER = 'admin'
-    env.DEFECTDOJO_PASSWORD = 'admin123'
+
 
     try {
 
