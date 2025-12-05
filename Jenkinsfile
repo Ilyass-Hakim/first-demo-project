@@ -118,7 +118,8 @@ node('maven_build_server') {
                     --scan /src \
                     --format ALL \
                     --out /reports \
-                    --project "jenkins-build"
+                    --project "jenkins-build" \
+                    --disableAnalysis OSSINDEX
             '''
             archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.*', fingerprint: true
         }
