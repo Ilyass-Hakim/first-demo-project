@@ -116,10 +116,10 @@ node('maven_build_server') {
                     --user $(id -u):$(id -g) \
                     owasp/dependency-check:latest \
                     --scan /src \
+                    -e DC_DISABLE_OSSINDEX=true \
                     --format ALL \
                     --out /reports \
-                    --project "jenkins-build" \
-                    --disableAnalysis OSSINDEX
+                    --project "jenkins-build" 
             '''
             archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.*', fingerprint: true
         }
