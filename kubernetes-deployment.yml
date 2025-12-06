@@ -39,3 +39,33 @@
                 ports:
                 - containerPort: 8080
         EOF
+
+    # ====================================================
+    # DÉBUT - AJOUT POUR RENDRE L'APPLICATION ACCESSIBLE
+    # ====================================================
+    # Ce Service NodePort expose l'application sur un port
+    # accessible depuis l'extérieur du cluster Kubernetes
+    # Accès via : http://<IP-DU-NOEUD>:30080
+    
+    - name: Create NodePort Service to expose application externally
+      shell: |
+        export KUBECONFIG=/tmp/kube/config
+        /usr/local/bin/kubectl apply -f - <<EOF
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: {{ deployment_name }}-service
+          namespace: {{ k8s_namespace }}
+        spec:
+          type: NodePort
+          selector:
+            app: webapp
+          ports:
+          - port: 80
+            targetPort: 8080
+            nodePort: 30080
+        EOF
+
+    # ====================================================
+    # FIN - AJOUT POUR RENDRE L'APPLICATION ACCESSIBLE
+    # ====================================================
