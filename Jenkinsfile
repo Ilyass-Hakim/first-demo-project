@@ -113,13 +113,14 @@ node('maven_build_server') {
                     -v $WORKSPACE:/src \
                     -v /opt/owasp-data:/usr/share/dependency-check/data \
                     -v $WORKSPACE/owasp-reports:/reports \
+                    -v /home/jenkins/workspace/first-pipeline-project/suppress-ossindex.xml:/suppress-ossindex.xml \
                     --user $(id -u):$(id -g) \
                     owasp/dependency-check:latest \
-                    -e DC_DISABLE_OSSINDEX=true \
                     --scan /src \
                     --format ALL \
                     --out /reports \
                     --project "jenkins-build" 
+                    --suppression /suppress-ossindex.xml
             '''
             archiveArtifacts artifacts: 'owasp-reports/dependency-check-report.*', fingerprint: true
         }
