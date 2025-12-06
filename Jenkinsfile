@@ -115,8 +115,8 @@ node('maven_build_server') {
                     -v $WORKSPACE/owasp-reports:/reports \
                     --user $(id -u):$(id -g) \
                     owasp/dependency-check:latest \
-                    --scan /src \
                     -e DC_DISABLE_OSSINDEX=true \
+                    --scan /src \
                     --format ALL \
                     --out /reports \
                     --project "jenkins-build" 
