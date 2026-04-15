@@ -114,7 +114,7 @@ node('maven_build_server') {
                     -v /opt/owasp-data:/usr/share/dependency-check/data \
                     -v $WORKSPACE/owasp-reports:/reports \
                     --user $(id -u):$(id -g) \
-                    owasp/dependency-check:latest \
+                    owasp/dependency-check:10.0.3 \
                     --scan /src \
                     --format ALL \
                     --out /reports \
